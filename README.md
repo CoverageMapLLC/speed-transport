@@ -1,4 +1,17 @@
+<p align="center">
+  <a href="https://coveragemap.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./assets/coveragemap-logo-dark.svg">
+      <img alt="CoverageMap" src="./assets/coveragemap-logo.svg" width="360">
+    </picture>
+  </a>
+</p>
+
 # @coveragemap/speed-transport
+
+[![npm](https://img.shields.io/npm/v/@coveragemap/speed-transport)](https://www.npmjs.com/package/@coveragemap/speed-transport)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
+[![Node.js](https://img.shields.io/node/v/@coveragemap/speed-transport)](https://nodejs.org)
 
 Raw TCP, WebSocket, and secure WebSocket on one port, built for moving bytes with as little CPU as possible. It powers the CoverageMap speed test servers and the raw TCP transport of [`@coveragemap/speed-test`](https://github.com/CoverageMapLLC/coveragemap-speed-test).
 
