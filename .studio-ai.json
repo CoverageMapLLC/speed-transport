@@ -4,14 +4,30 @@
     "owner": "CoverageMapLLC",
     "name": "speed-transport"
   },
-  "updatedAt": "2026-10-09T04:44:40.112Z",
+  "updatedAt": "2026-10-09T04:45:16.992Z",
   "config": {
-    "name": "speed-transport",
+    "name": "Speed Transport",
     "description": "A custom npm library that combines efficient WSS, WS, and TCP connections into one port with smart routing",
     "responsibilities": [],
     "tags": [],
     "instructions": "",
     "branchMapping": {},
-    "relationships": []
+    "relationships": [
+      {
+        "kind": "consumedBy",
+        "repository": "CoverageMapLLC/coveragemap-speed-test-infrastructure",
+        "note": null
+      },
+      {
+        "kind": "consumedBy",
+        "repository": "CoverageMapLLC/coveragemap-speed-test-server",
+        "note": null
+      },
+      {
+        "kind": "consumedBy",
+        "repository": "CoverageMapLLC/speed-testing",
+        "note": null
+      }
+    ]
   }
 }
