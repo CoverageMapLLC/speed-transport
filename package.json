@@ -1,6 +1,6 @@
 {
   "name": "@coveragemap/speed-transport",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Raw TCP, WebSocket, and secure WebSocket on one port, with minimal CPU per byte, for the CoverageMap speed test protocol",
   "type": "module",
   "main": "dist/index.js",

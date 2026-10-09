@@ -174,7 +174,10 @@ export class SpeedTransportSocket extends EventTarget {
 
     this.socket.on('data', (chunk: Buffer) => this.onData(chunk));
     this.socket.on('error', () => {
-      if (this.readyState === SpeedTransportSocket.CONNECTING) this.dispatch(new Event('error'));
+      if (this.readyState !== SpeedTransportSocket.CONNECTING) return;
+      // CLOSING first: an error handler that calls close() must not fail the connection again.
+      this.readyState = SpeedTransportSocket.CLOSING;
+      this.dispatch(new Event('error'));
     });
     this.socket.on('end', () => this.socket.end());
     this.socket.once('close', () => this.onSocketClose());
@@ -311,10 +314,13 @@ export class SpeedTransportSocket extends EventTarget {
 
   private abort(reason: string): void {
     if (this.readyState === SpeedTransportSocket.CLOSED) return;
+    const wasConnecting = this.readyState === SpeedTransportSocket.CONNECTING;
     this.closeReason = reason;
-    if (this.readyState === SpeedTransportSocket.CONNECTING) this.dispatch(new Event('error'));
+    // CLOSING before the error event: a handler that calls close() would otherwise abort again,
+    // dispatching error again, until the stack overflowed.
     this.readyState = SpeedTransportSocket.CLOSING;
     this.socket.destroy();
+    if (wasConnecting) this.dispatch(new Event('error'));
   }
 
   private onSocketClose(): void {

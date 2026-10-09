@@ -151,7 +151,7 @@ See [cluster](./docs/cluster.md).
 
 ## Cloudflare Workers and browsers
 
-Browsers can only open WebSocket connections, and Cloudflare Workers only accept HTTP. Both keep working against this server over `wss://`, and clients choose raw TCP only where it exists: the CoverageMap client library probes for it in Node.js and falls back to WebSocket otherwise. Behind a reverse proxy, pass `tcp: false` (a proxy only forwards HTTP) and `tls: null`.
+Browsers can only open WebSocket connections, and Cloudflare Workers only accept HTTP. Both keep working against this server over `wss://`, and clients choose raw TCP only where it exists: CoverageMap servers list their transports (`WSSv1`, `WSv1`, `TCPSv1`, `TCPv1`) in a `protocols` field, and the CoverageMap client library uses raw TCP in Node.js only when it is listed, falling back to WebSocket if the first connection fails. Behind a reverse proxy, pass `tcp: false` (a proxy only forwards HTTP) and `tls: null`.
 
 ## Development
 
