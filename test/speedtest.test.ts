@@ -125,14 +125,25 @@ describe.each(TRANSPORTS)('speed test protocol over %s', (transport) => {
   });
 
   it('resets the connection at once on CLOSE, even with data queued', async () => {
-    running = await startSpeedTestServer();
+    const server = (running = await startSpeedTestServer()).server;
     const client = await connectClient(transport, running.port, { tcp: { binaryPayloads: 'discard' } });
     client.send('START 1024 1000');
     await client.next();
     const started = Date.now();
     client.send('CLOSE');
-    await client.closed(3000);
+
+    // The server ends the session at once instead of draining 1000 MiB first.
+    await expect.poll(() => server.connectionCount, { timeout: 1000, interval: 5 }).toBe(0);
     expect(Date.now() - started).toBeLessThan(1000);
+
+    // Whether the client sees the reset is up to its kernel: macOS may drop a reset whose
+    // sequence number is not the one it expects (RFC 5961) and wait for its own next send.
+    // The client library closes its side after CLOSE, so only check that the queued data
+    // never arrived.
+    await sleep(200);
+    const binary = client.received.filter((message) => 'binary' in message).length;
+    expect(binary).toBeLessThan(999);
+    client.terminate();
   });
 });
 

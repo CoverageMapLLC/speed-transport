@@ -96,7 +96,8 @@ describe('one port, every transport', () => {
     for (const client of clients) client.close();
   });
 
-  it("works with Node's built-in WebSocket client", async () => {
+  // Node.js 20 only has WebSocket behind --experimental-websocket.
+  it.skipIf(typeof globalThis.WebSocket !== 'function')("works with Node's built-in WebSocket client", async () => {
     running = await startServer({ onConnection: echo });
     const ws = new globalThis.WebSocket(`ws://127.0.0.1:${running.port}/`);
     ws.binaryType = 'arraybuffer';

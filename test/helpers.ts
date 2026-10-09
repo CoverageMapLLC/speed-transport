@@ -70,6 +70,8 @@ export interface TestClient {
   nextText(timeoutMs?: number): Promise<string>;
   send(data: string | Buffer | Uint8Array): void;
   close(code?: number, reason?: string): void;
+  /** Destroys the client's socket without a close handshake. */
+  terminate(): void;
   closed(timeoutMs?: number): Promise<{ code: number; reason: string }>;
   bufferedAmount(): number;
   raw: WebSocket | SpeedTransportSocket;
@@ -137,6 +139,10 @@ function makeClient(
     },
     close(code, reason) {
       raw.close(code, reason);
+    },
+    terminate() {
+      if (raw instanceof SpeedTransportSocket) (raw as unknown as { socket: net.Socket }).socket.destroy();
+      else raw.terminate();
     },
     closed(timeoutMs = 5000) {
       if (closeResult) return Promise.resolve(closeResult);
