@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+### Bug Fixes
+
+- `SpeedTransportSocket`: an `error` handler that called `close()` while the connection was failing (refused, not answered in time, or answered by a server without raw TCP) made the socket dispatch `error` again, recursing until the stack overflowed. The socket now moves to `CLOSING` before it dispatches `error`, so the handler sees one `error` and then one `close`, as with WebSocket.
+
 ## 0.1.0
 
 First release.

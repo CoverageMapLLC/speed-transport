@@ -1,4 +1,17 @@
+<p align="center">
+  <a href="https://coveragemap.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./assets/coveragemap-logo-dark.svg">
+      <img alt="CoverageMap" src="./assets/coveragemap-logo.svg" width="360">
+    </picture>
+  </a>
+</p>
+
 # @coveragemap/speed-transport
+
+[![npm](https://img.shields.io/npm/v/@coveragemap/speed-transport)](https://www.npmjs.com/package/@coveragemap/speed-transport)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
+[![Node.js](https://img.shields.io/node/v/@coveragemap/speed-transport)](https://nodejs.org)
 
 Raw TCP, WebSocket, and secure WebSocket on one port, built for moving bytes with as little CPU as possible. It powers the CoverageMap speed test servers and the raw TCP transport of [`@coveragemap/speed-test`](https://github.com/CoverageMapLLC/coveragemap-speed-test).
 
@@ -138,7 +151,7 @@ See [cluster](./docs/cluster.md).
 
 ## Cloudflare Workers and browsers
 
-Browsers can only open WebSocket connections, and Cloudflare Workers only accept HTTP. Both keep working against this server over `wss://`, and clients choose raw TCP only where it exists: the CoverageMap client library probes for it in Node.js and falls back to WebSocket otherwise. Behind a reverse proxy, pass `tcp: false` (a proxy only forwards HTTP) and `tls: null`.
+Browsers can only open WebSocket connections, and Cloudflare Workers only accept HTTP. Both keep working against this server over `wss://`, and clients choose raw TCP only where it exists: CoverageMap servers list their transports (`WSSv1`, `WSv1`, `TCPSv1`, `TCPv1`) in a `protocols` field, and the CoverageMap client library uses raw TCP in Node.js only when it is listed, falling back to WebSocket if the first connection fails. Behind a reverse proxy, pass `tcp: false` (a proxy only forwards HTTP) and `tls: null`.
 
 ## Development
 
