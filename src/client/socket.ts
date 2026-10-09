@@ -11,7 +11,10 @@ import {
 } from '../frame.js';
 
 export interface SpeedTransportSocketOptions {
-  /** Verify the server certificate for `tcps://`. Default true. */
+  /**
+   * Verify the server certificate for `tcps://`. Defaults to Node's default, which is true
+   * unless `NODE_TLS_REJECT_UNAUTHORIZED=0`, the same as Node's built-in WebSocket.
+   */
   rejectUnauthorized?: boolean;
   /** Extra certificate authorities for `tcps://`. */
   ca?: string | Buffer | Array<string | Buffer>;
@@ -55,6 +58,14 @@ const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_BULK_THRESHOLD = 64 * 1024;
 const CLOSE_TIMEOUT_MS = 1_000;
+
+/**
+ * `tls.connect` spreads its options over its defaults, so an explicit `undefined` would turn
+ * verification off. Leave the key out unless it was set.
+ */
+function verifyOption(rejectUnauthorized: boolean | undefined): { rejectUnauthorized?: boolean } {
+  return rejectUnauthorized === undefined ? {} : { rejectUnauthorized };
+}
 
 /** Parses `tcp://host:port` and `tcps://host:port`. */
 export function parseTransportUrl(url: string): { secure: boolean; host: string; port: number } {
@@ -148,7 +159,7 @@ export class SpeedTransportSocket extends EventTarget {
             host,
             port,
             servername: options.servername ?? (net.isIP(host) ? undefined : host),
-            rejectUnauthorized: options.rejectUnauthorized ?? true,
+            ...verifyOption(options.rejectUnauthorized),
             ca: options.ca,
           },
           onConnect
@@ -347,7 +358,7 @@ export function probeTcpTransport(host: string, port: number, options: ProbeOpti
             host,
             port,
             servername: options.servername ?? (net.isIP(host) ? undefined : host),
-            rejectUnauthorized: options.rejectUnauthorized ?? true,
+            ...verifyOption(options.rejectUnauthorized),
           },
           onConnect
         )

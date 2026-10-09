@@ -288,6 +288,24 @@ describe('SpeedTransportSocket over TLS', () => {
     expect((await closed(socket)).code).toBe(1006);
   });
 
+  it('follows NODE_TLS_REJECT_UNAUTHORIZED like the built-in WebSocket', async () => {
+    running = await startSpeedTestServer();
+    const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    cleanups.push(() => {
+      if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+    });
+    const socket = new SpeedTransportSocket(`tcps://127.0.0.1:${running.port}`);
+    await opened(socket);
+    socket.close();
+    await closed(socket);
+
+    // An explicit option still wins over the environment.
+    const strict = new SpeedTransportSocket(`tcps://127.0.0.1:${running.port}`, { rejectUnauthorized: true });
+    expect((await closed(strict)).code).toBe(1006);
+  });
+
   it('accepts a certificate from a custom CA', async () => {
     running = await startSpeedTestServer();
     const cert = await getCertificate();
@@ -304,6 +322,11 @@ describe('probeTcpTransport', () => {
     running = await startSpeedTestServer();
     expect(await probeTcpTransport('127.0.0.1', running.port)).toBe(true);
     expect(await probeTcpTransport('127.0.0.1', running.port, { secure: true, rejectUnauthorized: false })).toBe(true);
+  });
+
+  it('verifies certificates by default over TLS', async () => {
+    running = await startSpeedTestServer();
+    expect(await probeTcpTransport('127.0.0.1', running.port, { secure: true })).toBe(false);
   });
 
   it('reports servers that do not', async () => {
