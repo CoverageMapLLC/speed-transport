@@ -1,0 +1,55 @@
+name: Publish Package to npm
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: publish-npm-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @coveragemap/speed-transport
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Production
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Require main branch
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "This workflow only publishes from main."
+            echo "Run this workflow with the main branch selected."
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Show publish tool versions
+        run: |
+          node -v
+          npm -v
+
+      - name: Verify the packed package
+        run: npm run build && node scripts/verify-package.mjs
+
+      # prepublishOnly runs lint, typecheck, the full test suite, and the build first.
+      - name: Publish package
+        run: npm publish --access public --provenance --loglevel verbose

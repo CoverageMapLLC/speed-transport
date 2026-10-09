@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+autobahn/reports/
+*.tgz
+.DS_Store
+autobahn/config/
