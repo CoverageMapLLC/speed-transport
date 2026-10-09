@@ -146,7 +146,7 @@ export function createSpeedTestServer(options: SpeedTestServerOptions): SpeedTra
   const { speedTest, limits, ...rest } = options;
   return createSpeedTransportServer({
     ...rest,
-    limits: withDefaults<ServerLimits, Partial<ServerLimits>>({ maxBufferedMessageBytes: COMMAND_MAX_BYTES }, limits),
+    limits: withDefaults<Partial<ServerLimits>>({ maxBufferedMessageBytes: COMMAND_MAX_BYTES }, limits),
     onConnection: createSpeedTestProtocol(speedTest),
   });
 }
