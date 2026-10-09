@@ -25,6 +25,24 @@ On loopback one worker process serves 26 Gbps of raw TCP download, and upload ne
 
 It has no runtime dependencies and needs Node.js 20 or later. It passes the [Autobahn](https://github.com/crossbario/autobahn-testsuite) WebSocket conformance suite (301 cases; compression is never negotiated, so 12.* and 13.* do not apply).
 
+## What it is for
+
+- **Speed test servers and clients.** The CoverageMap speed test protocol is built in (`createSpeedTestServer`), and the raw TCP client is what `@coveragemap/speed-test` uses in Node.js.
+- **Moving bulk data where the payload is counted, not read.** Throughput tests, load generators, and network diagnostics that need multi-gigabit rates with little CPU.
+- **Serving different clients on one port.** Browsers connect over secure WebSocket, Node.js clients over raw TCP, and HTTP routes such as health checks sit next to them, all without extra ports, proxies, or firewall rules.
+- **Using every core of a server without infrastructure changes.** The cluster is plain Node.js processes, so a normal deploy is enough.
+- **Small custom message protocols** that want the same properties: `createSpeedTransportServer` hands you each session's messages and leaves the protocol to you.
+
+## What it is not for
+
+- **General purpose WebSocket applications** such as chat, live dashboards, or multiplayer games. There is no compression, no subprotocol or extension negotiation, no rooms or broadcasting to clients, and no reconnection. Messages above `maxBufferedMessageBytes` arrive as a length only, never as data. Use [`ws`](https://github.com/websockets/ws) or a framework built on it instead.
+- **Browsers.** The raw TCP client needs Node.js (`node:net` and `node:tls`). Browsers use their built-in `WebSocket` against the same server.
+- **Cloudflare Workers, Deno Deploy, and other serverless runtimes.** The server needs Node.js sockets and child processes. Workers only accept HTTP, so they can serve the WebSocket side of the protocol with their own code, but never raw TCP.
+- **Raw TCP through HTTP proxies, CDNs, or layer 7 load balancers.** These only forward HTTP. Raw TCP needs a direct connection or a TCP (layer 4) pass-through; behind anything else, set `tcp: false` and let clients use WebSocket.
+- **A full web server.** HTTP on the same port is HTTP/1.1 only, meant for a few routes like `/v1/server` and health checks. HTTP/2 and HTTP/3 are not supported.
+- **Authentication or encryption beyond TLS.** It offers an `authorize` hook and per-client connection limits; anything else is up to the application.
+- **A stable API yet.** Until 1.0, minor versions may change the API. Pin the minor version.
+
 ## Install
 
 ```bash
