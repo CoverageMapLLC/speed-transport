@@ -58,7 +58,7 @@ client                                server
 2. The server admits the session (see [admission](#admission-authorize-and-limits)) and echoes the same 7 bytes. A refused session is closed without the echo.
 3. From then on both sides send [frames](#frames). Neither side masks.
 
-The echo tells a client that the server speaks raw TCP. A server that does not answers an HTTP error to what looks like a malformed request, or closes the connection, and a client should then use WebSocket. `probeTcpTransport` does exactly this check.
+The echo tells a client that the server speaks raw TCP. A server that does not answers an HTTP error to what looks like a malformed request, or closes the connection, and a client should then use WebSocket. `probeTcpTransport` does exactly this check. Applications that can learn a server's transports some other way, as CoverageMap servers report theirs in a `protocols` field, do not need a separate check: connect over raw TCP and fall back to WebSocket if that first connection fails.
 
 The `1` is the transport version. A future incompatible version would use a different preamble, which older servers refuse.
 
@@ -147,7 +147,7 @@ Raw TCP sessions that are refused are closed without the preamble echo.
 | Client | Use |
 |---|---|
 | Browser | `wss://` (or `ws://` on pages served over HTTP) |
-| Node.js | `tcps://` when `probeTcpTransport(host, port, { secure: true })` resolves true, else `wss://` |
+| Node.js | `tcps://` when the server is known to offer it (for CoverageMap servers, `TCPSv1` in `protocols`; otherwise `probeTcpTransport(host, port, { secure: true })`), else `wss://`. Fall back to `wss://` if the first raw TCP connection fails |
 | Behind a corporate proxy or a CDN | `wss://`; proxies and CDNs only forward HTTP |
 
 The raw TCP client, `SpeedTransportSocket`, has the WebSocket API, so the same code can drive either. With `binaryPayloads: 'discard'` it does not copy large binary messages: they arrive as a shared zero-filled `ArrayBuffer` of the right length, which is all a throughput test needs.

@@ -279,6 +279,46 @@ describe('SpeedTransportSocket against servers that do not speak raw TCP', () =>
     const socket = new SpeedTransportSocket(`tcp://127.0.0.1:${await closedPort()}`);
     expect((await closed(socket)).code).toBe(1006);
   });
+
+  // Error handlers commonly call close(). Before 0.1.1 that re-entered the failure and
+  // dispatched error again until the stack overflowed.
+  it.each([
+    ['a plain HTTP server answers the preamble', async () => {
+      const server = http.createServer((_req, res) => res.end('hi'));
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      cleanups.push(() => new Promise((resolve) => server.close(() => resolve())));
+      return { port: (server.address() as net.AddressInfo).port, options: {} };
+    }],
+    ['the server never answers', async () => ({ port: await silentServer(), options: { connectTimeoutMs: 200 } })],
+    ['nothing listens', async () => ({ port: await closedPort(), options: {} })],
+  ])('dispatches one error and one close when %s and the error handler calls close()', async (_case, start) => {
+    const { port, options } = await start();
+    const socket = new SpeedTransportSocket(`tcp://127.0.0.1:${port}`, options);
+    const events: string[] = [];
+    socket.onerror = () => {
+      events.push('error');
+      socket.close();
+    };
+    socket.addEventListener('close', () => events.push('close'));
+    await closed(socket);
+    await sleep(50);
+    expect(events).toEqual(['error', 'close']);
+    expect(socket.readyState).toBe(SpeedTransportSocket.CLOSED);
+  });
+
+  it('dispatches one error and one close when closed while connecting', async () => {
+    const socket = new SpeedTransportSocket(`tcp://127.0.0.1:${await silentServer()}`);
+    const events: string[] = [];
+    socket.onerror = () => {
+      events.push('error');
+      socket.close();
+    };
+    socket.addEventListener('close', () => events.push('close'));
+    socket.close();
+    await closed(socket);
+    await sleep(50);
+    expect(events).toEqual(['error', 'close']);
+  });
 });
 
 describe('SpeedTransportSocket over TLS', () => {
