@@ -5,6 +5,7 @@ import { Connection, DEFAULT_CONNECTION_LIMITS, type ConnectionLimits, type Tran
 import { TCP_PREAMBLE, detectProtocol, parseClientHello, type ClientHelloInfo } from './detect.js';
 import { buildHttpErrorResponse, buildUpgradeResponse, validateUpgradeRequest } from './handshake.js';
 import type { ConnectionLimiter } from './limiter.js';
+import { withDefaults } from './defaults.js';
 
 export interface ServerLimits extends ConnectionLimits {
   /** Connections that do not identify their protocol within this time are destroyed. */
@@ -93,7 +94,7 @@ export class SpeedTransportServer {
 
   constructor(options: SpeedTransportServerOptions) {
     this.options = options;
-    this.limits = { ...DEFAULT_SERVER_LIMITS, ...options.limits };
+    this.limits = withDefaults(DEFAULT_SERVER_LIMITS, options.limits);
 
     const websocket = options.websocket ?? true;
     if (websocket === false) {

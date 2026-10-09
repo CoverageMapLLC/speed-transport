@@ -2,9 +2,11 @@ import type { Connection } from './connection.js';
 import { CloseCode, Opcode, encodeFrame } from './frame.js';
 import {
   createSpeedTransportServer,
+  type ServerLimits,
   type SpeedTransportServer,
   type SpeedTransportServerOptions,
 } from './server.js';
+import { withDefaults } from './defaults.js';
 
 /**
  * The CoverageMap speed test protocol, identical on every transport:
@@ -88,7 +90,7 @@ const PONG = encodeFrame(Opcode.Text, Buffer.from('PONG'));
 
 /** Returns an `onConnection` handler that speaks the speed test protocol. */
 export function createSpeedTestProtocol(options: SpeedTestProtocolOptions = {}): (connection: Connection) => void {
-  const limits = { ...DEFAULT_SPEED_TEST_LIMITS, ...options.limits };
+  const limits = withDefaults(DEFAULT_SPEED_TEST_LIMITS, options.limits);
   const pool = options.pool ?? new ZeroBufferPool();
   const onEvent = options.onEvent;
 
@@ -144,7 +146,7 @@ export function createSpeedTestServer(options: SpeedTestServerOptions): SpeedTra
   const { speedTest, limits, ...rest } = options;
   return createSpeedTransportServer({
     ...rest,
-    limits: { maxBufferedMessageBytes: COMMAND_MAX_BYTES, ...limits },
+    limits: withDefaults<ServerLimits, Partial<ServerLimits>>({ maxBufferedMessageBytes: COMMAND_MAX_BYTES }, limits),
     onConnection: createSpeedTestProtocol(speedTest),
   });
 }

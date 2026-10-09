@@ -8,7 +8,10 @@ process.on('message', (message) => {
   }
 });
 
+// BENCH_SEND_HIGH_WATER overrides limits.sendHighWaterBytes, for tuning.
+const sendHighWaterBytes = Number(process.env.BENCH_SEND_HIGH_WATER) || undefined;
+
 runClusterWorker(() =>
   // TLS settings arrive from the primary through setSecureContext.
-  createSpeedTestServer({ tls: {} })
+  createSpeedTestServer({ tls: {}, limits: { sendHighWaterBytes } })
 );

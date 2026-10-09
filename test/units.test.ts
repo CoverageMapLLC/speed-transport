@@ -11,7 +11,9 @@ import {
 } from '../src/handshake.js';
 import { ConnectionCounter } from '../src/limiter.js';
 import { resolveWorkerCount } from '../src/cluster.js';
-import { ZeroBufferPool, parseStartCommand } from '../src/speedtest.js';
+import { ZeroBufferPool, createSpeedTestServer, parseStartCommand } from '../src/speedtest.js';
+import { withDefaults } from '../src/defaults.js';
+import { DEFAULT_SERVER_LIMITS, createSpeedTransportServer } from '../src/server.js';
 
 /** Captures the first bytes a real TLS client sends. */
 function captureClientHello(options: tls.ConnectionOptions): Promise<Buffer> {
@@ -217,5 +219,39 @@ describe('ZeroBufferPool', () => {
     expect(a.every((byte) => byte === 0)).toBe(true);
     expect(pool.get(8)).not.toBe(a);
     expect(pool.size).toBe(2);
+  });
+});
+
+describe('withDefaults', () => {
+  it('keeps defaults for missing and undefined overrides', () => {
+    expect(withDefaults({ a: 1, b: 2 }, { b: undefined })).toEqual({ a: 1, b: 2 });
+    expect(withDefaults({ a: 1, b: 2 }, undefined)).toEqual({ a: 1, b: 2 });
+    expect(withDefaults({ a: 1, b: 2 }, null)).toEqual({ a: 1, b: 2 });
+  });
+
+  it('applies defined overrides, including zero and false', () => {
+    expect(withDefaults({ a: 1, b: true }, { a: 0, b: false })).toEqual({ a: 0, b: false });
+  });
+
+  it('never changes the defaults object', () => {
+    const defaults = { a: 1 };
+    withDefaults(defaults, { a: 2 });
+    expect(defaults).toEqual({ a: 1 });
+  });
+});
+
+describe('server limits', () => {
+  it('keep their defaults when an option is explicitly undefined', () => {
+    const server = createSpeedTransportServer({
+      onConnection: () => {},
+      limits: { sendHighWaterBytes: undefined, idleTimeoutMs: 5 },
+    });
+    expect(server.limits.sendHighWaterBytes).toBe(DEFAULT_SERVER_LIMITS.sendHighWaterBytes);
+    expect(server.limits.idleTimeoutMs).toBe(5);
+  });
+
+  it('buffer at most command sized messages in the speed test server unless overridden', () => {
+    expect(createSpeedTestServer({ limits: { maxBufferedMessageBytes: undefined } }).limits.maxBufferedMessageBytes).toBe(128);
+    expect(createSpeedTestServer({ limits: { maxBufferedMessageBytes: 4096 } }).limits.maxBufferedMessageBytes).toBe(4096);
   });
 });

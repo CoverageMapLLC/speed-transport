@@ -9,6 +9,7 @@ import {
   encodeFrame,
   encodeFrameHeader,
 } from './frame.js';
+import { withDefaults } from './defaults.js';
 
 export type TransportKind = 'tcp' | 'websocket';
 
@@ -30,7 +31,7 @@ export const DEFAULT_CONNECTION_LIMITS: ConnectionLimits = {
   maxBufferedMessageBytes: 64 * 1024,
   idleTimeoutMs: 60_000,
   closeTimeoutMs: 1_000,
-  sendHighWaterBytes: 4 * 1024 * 1024,
+  sendHighWaterBytes: 10 * 1024 * 1024,
 };
 
 export interface ConnectionEvents {
@@ -89,7 +90,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     this.secure = options.secure;
     this.request = options.request ?? null;
     this.remoteAddress = socket.remoteAddress;
-    this.limits = { ...DEFAULT_CONNECTION_LIMITS, ...options.limits };
+    this.limits = withDefaults(DEFAULT_CONNECTION_LIMITS, options.limits);
     this.head = options.head && options.head.length > 0 ? options.head : null;
 
     this.parser = new FrameParser(
