@@ -23,6 +23,7 @@ export const DEFAULT_SERVER_LIMITS: ServerLimits = {
 /** Who is opening a session. Passed to `authorize` and `clientKey`. */
 export interface SessionContext {
   kind: TransportKind;
+  /** Whether the session runs over TLS, which only secure WebSocket does. */
   secure: boolean;
   remoteAddress: string | undefined;
   /** The HTTP upgrade request for WebSocket sessions, null for raw TCP. */
@@ -37,11 +38,11 @@ export interface SpeedTransportServerOptions {
   onConnection: (connection: Connection) => void;
   /**
    * TLS settings. When present, TLS connections are accepted and the decrypted stream is
-   * routed again, which gives secure WebSocket and raw TCP over TLS. The certificate can
-   * be replaced at runtime with `setSecureContext`.
+   * routed again to the HTTP parser, which gives secure WebSocket. The certificate can be
+   * replaced at runtime with `setSecureContext`.
    */
   tls?: TlsOptions | null;
-  /** Accept WebSocket and raw TCP without TLS. Default true. */
+  /** Accept WebSocket and raw TCP without TLS. Default true. Raw TCP never uses TLS, so false disables it. */
   plaintext?: boolean;
   /** Accept the raw TCP transport. Default true. */
   tcp?: boolean;
@@ -77,7 +78,7 @@ function rejectSocket(socket: Socket, status: number, reason: string, headers?: 
 }
 
 /**
- * Serves raw TCP, WebSocket, and secure WebSocket (plus raw TCP over TLS) on one port.
+ * Serves raw TCP, WebSocket, and secure WebSocket on one port.
  *
  * `listen` binds a port; `handle` accepts sockets accepted elsewhere, which is how cluster
  * workers and front doors feed it.
@@ -212,11 +213,12 @@ export class SpeedTransportServer {
         return;
       }
       case 'tcp': {
-        if ((!secure && this.options.plaintext === false) || this.options.tcp === false) {
+        // Raw TCP is plaintext only: TLS carries nothing but HTTP and secure WebSocket.
+        if (secure || this.options.plaintext === false || this.options.tcp === false) {
           socket.destroy();
           return;
         }
-        void this.startTcp(socket, secure, data.subarray(TCP_PREAMBLE.length));
+        void this.startTcp(socket, data.subarray(TCP_PREAMBLE.length));
         return;
       }
       case 'http': {
@@ -308,11 +310,11 @@ export class SpeedTransportServer {
     );
   }
 
-  private async startTcp(socket: Socket, secure: boolean, head: Buffer): Promise<void> {
+  private async startTcp(socket: Socket, head: Buffer): Promise<void> {
     this.pending.add(socket);
     const admission = await this.admit({
       kind: 'tcp',
-      secure,
+      secure: false,
       remoteAddress: socket.remoteAddress,
       request: null,
     });
@@ -327,7 +329,7 @@ export class SpeedTransportServer {
     }
 
     socket.write(TCP_PREAMBLE);
-    this.open(new Connection(socket, { kind: 'tcp', secure, limits: this.limits, head }), admission.release);
+    this.open(new Connection(socket, { kind: 'tcp', secure: false, limits: this.limits, head }), admission.release);
   }
 
   private open(connection: Connection, release: () => void): void {

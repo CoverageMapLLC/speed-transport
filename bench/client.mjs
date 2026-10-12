@@ -1,6 +1,6 @@
 // Benchmark client process, forked by bench/run.mjs.
 //
-//   argv: <transport: tcp|tcps|ws|wss> <direction: down|up> <port> <threads> <connsPerThread>
+//   argv: <transport: tcp|ws|wss> <direction: down|up> <port> <threads> <connsPerThread>
 //
 // Opens threads x conns sockets across worker threads, the way the speed test client
 // library does, and drives them like its download and upload lanes. Raw TCP uses this
@@ -48,8 +48,8 @@ if (isMainThread) {
 
   for (let i = 0; i < conns; i++) {
     const socket =
-      transport === 'tcp' || transport === 'tcps'
-        ? new SpeedTransportSocket(`${transport}://127.0.0.1:${port}`, { rejectUnauthorized: false, binaryPayloads: 'discard' })
+      transport === 'tcp'
+        ? new SpeedTransportSocket(`tcp://127.0.0.1:${port}`, { binaryPayloads: 'discard' })
         : new WebSocket(`${transport}://127.0.0.1:${port}/v1/ws`);
     socket.binaryType = 'arraybuffer';
     socket.onopen = () => {

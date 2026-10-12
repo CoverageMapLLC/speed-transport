@@ -2,7 +2,7 @@
 // Loopback benchmark: this library against the ws-based baseline, on every transport.
 //
 //   npm run bench -- [--quick] [--runs 3] [--seconds 6] [--workers 1,2,4] [--threads 6]
-//                    [--conns 2] [--transports tcp,tcps,ws,wss] [--json results.json]
+//                    [--conns 2] [--transports tcp,ws,wss] [--json results.json]
 //
 // For every combination it starts the server, opens threads x conns client sockets, waits
 // for them to warm up, then measures throughput and the CPU time of the client and every
@@ -21,7 +21,7 @@ const { values } = parseArgs({
     workers: { type: 'string', default: '1,2,4' },
     threads: { type: 'string', default: '6' },
     conns: { type: 'string', default: '2' },
-    transports: { type: 'string', default: 'tcp,tcps,ws,wss' },
+    transports: { type: 'string', default: 'tcp,ws,wss' },
     implementations: { type: 'string', default: 'ws,speed-transport' },
     directions: { type: 'string', default: 'down,up' },
     json: { type: 'string' },
@@ -57,7 +57,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function measure(implementation, transport, direction, workers) {
   const server = fork(new URL('./server.mjs', here), [implementation, String(workers), certPath, keyPath], { stdio: 'inherit' });
   const ready = await once(server, 'ready');
-  const port = transport === 'tls' || transport === 'wss' || transport === 'tcps' ? ready.tlsPort : ready.plainPort;
+  const port = transport === 'wss' ? ready.tlsPort : ready.plainPort;
   const client = fork(new URL('./client.mjs', here), [transport, direction, String(port), values.threads, values.conns], {
     stdio: 'inherit',
     env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0', NODE_NO_WARNINGS: '1' },
@@ -97,7 +97,7 @@ for (const direction of values.directions.split(',')) {
     for (const transport of values.transports.split(',')) {
       for (const implementation of values.implementations.split(',')) {
         // The ws baseline has no raw TCP transport.
-        if (implementation === 'ws' && (transport === 'tcp' || transport === 'tcps')) continue;
+        if (implementation === 'ws' && transport === 'tcp') continue;
         const runs = [];
         for (let i = 0; i < Number(values.runs); i++) runs.push(await measure(implementation, transport, direction, workers));
         const result = {

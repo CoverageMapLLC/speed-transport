@@ -47,6 +47,7 @@ export interface ConnectionEvents {
 
 export interface ConnectionOptions {
   kind: TransportKind;
+  /** Whether the session runs over TLS, which only secure WebSocket does. */
   secure: boolean;
   /** The upgrade request, for WebSocket connections. */
   request?: IncomingMessage | null;
@@ -60,7 +61,7 @@ type State = 'open' | 'closing' | 'closed';
 const PONG_EMPTY = encodeFrame(Opcode.Pong);
 
 /**
- * One client session over the raw TCP or WebSocket transport, plain or TLS. Both use the
+ * One client session over the raw TCP or (secure) WebSocket transport. Both use the
  * same frames; only WebSocket requires client frames to be masked.
  */
 export class Connection extends EventEmitter<ConnectionEvents> {
