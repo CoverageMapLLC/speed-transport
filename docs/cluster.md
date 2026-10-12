@@ -103,4 +103,4 @@ Each worker is a full Node.js process (about 70 MB idle on Windows). On the benc
 | 2.5 to 5 Gbps | 4 |
 | 10 Gbps | 6 to 8, on dedicated cores |
 
-Upload over TLS is the most expensive direction, because every byte is decrypted. Raw TCP and WebSocket without TLS need half or less of the CPU per Gbps of their TLS versions. See [benchmarks](./benchmarks.md).
+Upload over secure WebSocket is the most expensive case, because every byte is decrypted. Raw TCP and plain WebSocket need much less CPU per Gbps. See [benchmarks](./benchmarks.md).

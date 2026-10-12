@@ -60,10 +60,10 @@ async function closedPort(): Promise<number> {
 }
 
 describe('parseTransportUrl', () => {
-  it('parses tcp and tcps URLs', () => {
-    expect(parseTransportUrl('tcp://example.com:8080')).toEqual({ secure: false, host: 'example.com', port: 8080 });
-    expect(parseTransportUrl('tcps://10.0.0.1:443/ignored')).toEqual({ secure: true, host: '10.0.0.1', port: 443 });
-    expect(parseTransportUrl('tcp://[::1]:9000')).toEqual({ secure: false, host: '::1', port: 9000 });
+  it('parses tcp URLs', () => {
+    expect(parseTransportUrl('tcp://example.com:8080')).toEqual({ host: 'example.com', port: 8080 });
+    expect(parseTransportUrl('tcp://10.0.0.1:443/ignored')).toEqual({ host: '10.0.0.1', port: 443 });
+    expect(parseTransportUrl('tcp://[::1]:9000')).toEqual({ host: '::1', port: 9000 });
   });
 
   it('rejects other schemes and missing ports', () => {
@@ -71,6 +71,16 @@ describe('parseTransportUrl', () => {
     expect(() => parseTransportUrl('tcp://example.com')).toThrow(/explicit port/);
     expect(() => new SpeedTransportSocket('wss://x:1')).toThrow(SyntaxError);
   });
+
+  it.each(['tcps://127.0.0.1:443', 'tls://127.0.0.1:443', 'https://127.0.0.1:443'])(
+    'rejects %s with the unsupported scheme error',
+    (url) => {
+      const scheme = `${url.split(':')[0]}:`;
+      expect(() => parseTransportUrl(url)).toThrow(SyntaxError);
+      expect(() => new SpeedTransportSocket(url)).toThrow(SyntaxError);
+      expect(() => new SpeedTransportSocket(url)).toThrow(`Unsupported URL scheme ${scheme} (expected tcp:)`);
+    }
+  );
 });
 
 describe('SpeedTransportSocket', () => {
@@ -321,52 +331,15 @@ describe('SpeedTransportSocket against servers that do not speak raw TCP', () =>
   });
 });
 
-describe('SpeedTransportSocket over TLS', () => {
-  it('verifies certificates by default', async () => {
-    running = await startSpeedTestServer();
-    const socket = new SpeedTransportSocket(`tcps://127.0.0.1:${running.port}`);
-    expect((await closed(socket)).code).toBe(1006);
-  });
-
-  it('follows NODE_TLS_REJECT_UNAUTHORIZED like the built-in WebSocket', async () => {
-    running = await startSpeedTestServer();
-    const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    cleanups.push(() => {
-      if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
-    });
-    const socket = new SpeedTransportSocket(`tcps://127.0.0.1:${running.port}`);
-    await opened(socket);
-    socket.close();
-    await closed(socket);
-
-    // An explicit option still wins over the environment.
-    const strict = new SpeedTransportSocket(`tcps://127.0.0.1:${running.port}`, { rejectUnauthorized: true });
-    expect((await closed(strict)).code).toBe(1006);
-  });
-
-  it('accepts a certificate from a custom CA', async () => {
-    running = await startSpeedTestServer();
-    const cert = await getCertificate();
-    const socket = new SpeedTransportSocket(`tcps://127.0.0.1:${running.port}`, { ca: cert.cert });
-    await opened(socket);
-    socket.send('PING');
-    expect((await nextMessage(socket)).data).toBe('PONG');
-    socket.close();
-  });
-});
-
 describe('probeTcpTransport', () => {
   it('reports servers that speak the raw TCP transport', async () => {
     running = await startSpeedTestServer();
     expect(await probeTcpTransport('127.0.0.1', running.port)).toBe(true);
-    expect(await probeTcpTransport('127.0.0.1', running.port, { secure: true, rejectUnauthorized: false })).toBe(true);
   });
 
-  it('verifies certificates by default over TLS', async () => {
-    running = await startSpeedTestServer();
-    expect(await probeTcpTransport('127.0.0.1', running.port, { secure: true })).toBe(false);
+  it('reports servers that have raw TCP disabled', async () => {
+    running = await startSpeedTestServer({ tcp: false });
+    expect(await probeTcpTransport('127.0.0.1', running.port, { timeoutMs: 2000 })).toBe(false);
   });
 
   it('reports servers that do not', async () => {

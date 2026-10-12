@@ -83,11 +83,11 @@ describe('one port, every transport', () => {
     expect(await client.next()).toEqual({ text: 'bulk 100000' });
     client.close();
     await client.closed();
-    const kind = transport.startsWith('tcp') ? 'tcp' : 'websocket';
-    expect(seen).toEqual([`${kind}:${transport === 'wss' || transport === 'tcps'}`]);
+    const kind = transport === 'tcp' ? 'tcp' : 'websocket';
+    expect(seen).toEqual([`${kind}:${transport === 'wss'}`]);
   });
 
-  it('serves all four transports concurrently on the same port', async () => {
+  it('serves every transport concurrently on the same port', async () => {
     running = await startServer({ onConnection: echo });
     const clients = await Promise.all(TRANSPORTS.map((t) => connectClient(t, running!.port)));
     clients.forEach((client, i) => client.send(`from ${i}`));
@@ -266,10 +266,36 @@ describe('TLS', () => {
     const server = createSpeedTransportServer({ onConnection: echo });
     const { port } = await server.listen(0, '127.0.0.1');
     running = { server, port, close: () => server.close() };
-    await expect(connectClient('tcps', port)).rejects.toThrow();
+    await expect(connectClient('wss', port)).rejects.toThrow();
   });
 
-  it('can require TLS for every transport', async () => {
+  it.each([
+    ['in one write', [Buffer.concat([TCP_PREAMBLE, encodeFrame(Opcode.Text, Buffer.from('hi'))])]],
+    ['one byte at a time', [...TCP_PREAMBLE].map((byte) => Buffer.from([byte]))],
+  ])('closes a raw TCP preamble sent inside TLS %s and serves nothing', async (_name, chunks) => {
+    const sessions: string[] = [];
+    const counter = new ConnectionCounter(5);
+    running = await startServer({
+      onConnection: (connection) => sessions.push(connection.kind),
+      authorize: (context) => {
+        sessions.push(`authorize ${context.kind}`);
+        return true;
+      },
+      limiter: counter,
+    });
+    const conn = await rawConnect(running.port, true);
+    for (const chunk of chunks) {
+      conn.socket.write(chunk);
+      await sleep(2);
+    }
+    await conn.closed();
+    expect(conn.data().length).toBe(0);
+    expect(sessions).toEqual([]);
+    expect(counter.total).toBe(0);
+    expect(running.server.connectionCount).toBe(0);
+  });
+
+  it('can require TLS, leaving only secure WebSocket and HTTPS', async () => {
     running = await startServer({ onConnection: echo, plaintext: false });
     await expect(connectClient('ws', running.port)).rejects.toThrow();
     await expect(connectClient('tcp', running.port)).rejects.toThrow();
@@ -369,7 +395,6 @@ describe('admission', () => {
       { kind: 'websocket', secure: false, hasRequest: true },
       { kind: 'websocket', secure: true, hasRequest: true },
       { kind: 'tcp', secure: false, hasRequest: false },
-      { kind: 'tcp', secure: true, hasRequest: false },
     ]);
   });
 
@@ -388,7 +413,7 @@ describe('admission', () => {
     const a = await connectClient('ws', running.port);
     const b = await connectClient('tcp', running.port);
     expect(await upgradeStatus(running.port, '/')).toBe(429);
-    await expect(connectClient('tcps', running.port)).rejects.toThrow();
+    await expect(connectClient('tcp', running.port)).rejects.toThrow();
     a.close();
     await a.closed();
     await sleep(50);
@@ -494,7 +519,7 @@ describe('robustness', () => {
   it('survives many concurrent connections', async () => {
     running = await startServer({ onConnection: echo });
     const clients = await Promise.all(
-      Array.from({ length: 80 }, (_, i) => connectClient(TRANSPORTS[i % 4], running!.port))
+      Array.from({ length: 80 }, (_, i) => connectClient(TRANSPORTS[i % TRANSPORTS.length], running!.port))
     );
     clients.forEach((client, i) => client.send(`#${i}`));
     const replies = await Promise.all(clients.map((client) => client.next()));
@@ -605,10 +630,12 @@ describe('connection API', () => {
         seen.push({ kind: c.kind, secure: c.secure, address: c.remoteAddress, url: c.request?.url ?? null }),
     });
     (await connectClient('ws', running.port, { path: '/v1/ws?x=1' })).close();
-    (await connectClient('tcps', running.port)).close();
+    (await connectClient('wss', running.port, { path: '/v1/ws?y=2' })).close();
+    (await connectClient('tcp', running.port)).close();
     expect(seen).toEqual([
       { kind: 'websocket', secure: false, address: '127.0.0.1', url: '/v1/ws?x=1' },
-      { kind: 'tcp', secure: true, address: '127.0.0.1', url: null },
+      { kind: 'websocket', secure: true, address: '127.0.0.1', url: '/v1/ws?y=2' },
+      { kind: 'tcp', secure: false, address: '127.0.0.1', url: null },
     ]);
   });
 

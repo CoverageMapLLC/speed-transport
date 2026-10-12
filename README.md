@@ -17,13 +17,14 @@ Raw TCP, WebSocket, and secure WebSocket on one port, built for moving bytes wit
 
 ```
 tcp://host:port        raw TCP
-tcps://host:port       raw TCP over TLS
 ws://host:port/v1/ws   WebSocket
 wss://host:port/v1/ws  secure WebSocket
 https://host:port/...  your HTTP routes
 ```
 
-All of them share one listening port. The server reads the first bytes of each connection to decide what it is. A TLS ClientHello is decrypted and looked at again, the 7 byte preamble `STCP/1\n` starts a raw TCP session, and anything else is HTTP. No VM, kernel, or proxy changes are needed: deploying the app is enough.
+All of them share one listening port. The server reads the first bytes of each connection to decide what it is. A TLS ClientHello is decrypted and handed to HTTP, the 7 byte preamble `STCP/1\n` starts a raw TCP session, and anything else is HTTP. No VM, kernel, or proxy changes are needed: deploying the app is enough.
+
+Raw TCP is always plaintext. Speed test traffic carries no private data, so TLS is only used where browsers need it: secure WebSocket from HTTPS pages.
 
 ## Why
 
@@ -49,7 +50,7 @@ It has no runtime dependencies and needs Node.js 20 or later. It passes the [Aut
 ## What it is not for
 
 - **General purpose WebSocket applications** such as chat, live dashboards, or multiplayer games. There is no compression, no subprotocol or extension negotiation, no rooms or broadcasting to clients, and no reconnection. Messages above `maxBufferedMessageBytes` arrive as a length only, never as data. Use [`ws`](https://github.com/websockets/ws) or a framework built on it instead.
-- **Browsers.** The raw TCP client needs Node.js (`node:net` and `node:tls`). Browsers use their built-in `WebSocket` against the same server.
+- **Browsers.** The raw TCP client needs Node.js (`node:net`). Browsers use their built-in `WebSocket` against the same server.
 - **Cloudflare Workers, Deno Deploy, and other serverless runtimes.** The server needs Node.js sockets and child processes. Workers only accept HTTP, so they can serve the WebSocket side of the protocol with their own code, but never raw TCP.
 - **Raw TCP through HTTP proxies, CDNs, or layer 7 load balancers.** These only forward HTTP. Raw TCP needs a direct connection or a TCP (layer 4) pass-through; behind anything else, set `tcp: false` and let clients use WebSocket.
 - **A full web server.** HTTP on the same port is HTTP/1.1 only, meant for a few routes like `/v1/server` and health checks. HTTP/2 and HTTP/3 are not supported.
@@ -79,7 +80,7 @@ const server = createSpeedTestServer({
 await server.listen(443);
 ```
 
-This answers the CoverageMap speed test protocol on all four transports: `PING` → `PONG`, `START <kb> <count>` → `count` zero frames, an `ACK` for every upload message over 128 bytes, and `CLOSE` → connection reset.
+This answers the CoverageMap speed test protocol on all three transports: `PING` → `PONG`, `START <kb> <count>` → `count` zero frames, an `ACK` for every upload message over 128 bytes, and `CLOSE` → connection reset.
 
 ### Your own protocol
 
@@ -105,8 +106,8 @@ await server.listen(8080);
 ```js
 import { SpeedTransportSocket, probeTcpTransport } from '@coveragemap/speed-transport/client';
 
-if (await probeTcpTransport('speed.example.com', 443, { secure: true })) {
-  const socket = new SpeedTransportSocket('tcps://speed.example.com:443', { binaryPayloads: 'discard' });
+if (await probeTcpTransport('speed.example.com', 443)) {
+  const socket = new SpeedTransportSocket('tcp://speed.example.com:443', { binaryPayloads: 'discard' });
   socket.binaryType = 'arraybuffer';
   socket.onopen = () => socket.send('PING');
   socket.onmessage = (event) => console.log(event.data); // 'PONG'
@@ -151,7 +152,7 @@ See [cluster](./docs/cluster.md).
 
 ## Cloudflare Workers and browsers
 
-Browsers can only open WebSocket connections, and Cloudflare Workers only accept HTTP. Both keep working against this server over `wss://`, and clients choose raw TCP only where it exists: CoverageMap servers list their transports (`WSSv1`, `WSv1`, `TCPSv1`, `TCPv1`) in a `protocols` field, and the CoverageMap client library uses raw TCP in Node.js only when it is listed, falling back to WebSocket if the first connection fails. Behind a reverse proxy, pass `tcp: false` (a proxy only forwards HTTP) and `tls: null`.
+Browsers can only open WebSocket connections, and Cloudflare Workers only accept HTTP. Both keep working against this server over `wss://`, and clients choose raw TCP only where it exists: CoverageMap servers list their transports (`WSSv1`, `WSv1`, `TCPv1`) in a `protocols` field, and the CoverageMap client library uses raw TCP in Node.js only when it is listed, falling back to WebSocket if the first connection fails. Behind a reverse proxy, pass `tcp: false` (a proxy only forwards HTTP) and `tls: null`.
 
 ## Development
 
