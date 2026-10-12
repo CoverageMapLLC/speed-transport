@@ -29,17 +29,19 @@ The server reads from each new connection until the first bytes identify it:
 | `A` to `Z` | HTTP request | Node's HTTP parser: routes go to `requestListener`, `Upgrade: websocket` requests become WebSocket sessions |
 | anything else | Unknown | The connection is destroyed |
 
-Detection waits for more bytes while they are still a prefix of the preamble, so a preamble split across packets works. A connection that has not identified itself within `detectTimeoutMs` (10 s) is destroyed. Inside TLS only HTTP is accepted: TLS inside TLS and the raw TCP preamble are refused.
+Detection waits for more bytes while they are still a prefix of the preamble, so a preamble split across packets works. A connection that has not identified itself within `detectTimeoutMs` (10 s) is destroyed. Inside TLS only HTTP is accepted.
 
 That gives five endpoints on one port:
 
-| Transport | Without TLS | With TLS |
-|---|---|---|
-| Raw TCP | `tcp://host:port` | none |
-| WebSocket | `ws://host:port/path` | `wss://host:port/path` |
-| HTTP | `http://host:port/...` | `https://host:port/...` |
+| Endpoint | URL |
+|---|---|
+| Raw TCP | `tcp://host:port` |
+| WebSocket | `ws://host:port/path` |
+| Secure WebSocket | `wss://host:port/path` |
+| HTTP | `http://host:port/...` |
+| HTTPS | `https://host:port/...` |
 
-Raw TCP is plaintext only. Speed test traffic carries no private data, so TLS is used only where browsers need it: secure WebSocket from HTTPS pages.
+Speed test traffic carries no private data, so TLS is used only where browsers need it: secure WebSocket from HTTPS pages.
 
 `plaintext: false` refuses everything without TLS (HTTP gets `400 TLS required`), which leaves secure WebSocket and HTTPS. `tcp: false` refuses raw TCP. `websocket: false` refuses upgrades, and `websocket: { path }` limits them to one path (others get `404`).
 
@@ -148,8 +150,8 @@ Raw TCP sessions that are refused are closed without the preamble echo.
 
 | Client | Use |
 |---|---|
-| Browser | `wss://` (or `ws://` on pages served over HTTP) |
-| Node.js | `tcp://` when the server is known to offer it (for CoverageMap servers, `TCPv1` in `protocols`; otherwise `probeTcpTransport(host, port)`), else `wss://`. Fall back to `wss://` if the first raw TCP connection fails |
+| Browser | `ws://` on pages served over HTTP, `wss://` on HTTPS pages, which browsers require |
+| Node.js | `tcp://` when the server is known to offer it (for CoverageMap servers, `TCPv1` in `protocols`; otherwise `probeTcpTransport(host, port)`), else `ws://`, and `wss://` only when the server offers nothing else. Fall back to the next one if the first connection fails |
 | Behind a corporate proxy or a CDN | `wss://`; proxies and CDNs only forward HTTP |
 
 The raw TCP client, `SpeedTransportSocket`, has the WebSocket API, so the same code can drive either. With `binaryPayloads: 'discard'` it does not copy large binary messages: they arrive as a shared zero-filled `ArrayBuffer` of the right length, which is all a throughput test needs.
