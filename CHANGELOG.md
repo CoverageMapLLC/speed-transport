@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+### Breaking Changes
+
+- **Raw TCP over TLS (TCPS, `tcps://`) is removed.** It was not a standard transport, and speed test traffic carries nothing that needs to be private, so encrypting it only cost CPU. Raw TCP is now plaintext only (`tcp://`), and TLS is only used for secure WebSocket (`wss://`), which browsers need on HTTPS pages. Clients should use raw TCP where they can, then WebSocket, and secure WebSocket only where it is required.
+- Server: a TLS connection only carries HTTP and WebSocket. A raw TCP preamble inside TLS closes the connection before `authorize` or the limiter run. Raw TCP sessions always have `secure: false`.
+- Client: `SpeedTransportSocket` only accepts `tcp://` URLs; `tcps://` throws the unsupported scheme `SyntaxError` like any other scheme. The TLS options are removed: `rejectUnauthorized`, `ca`, and `servername` from `SpeedTransportSocketOptions`, and `secure`, `rejectUnauthorized`, and `servername` from `ProbeOptions`. `parseTransportUrl` returns `{ host, port }` without `secure`.
+
 ## 0.1.1
 
 ### Bug Fixes
