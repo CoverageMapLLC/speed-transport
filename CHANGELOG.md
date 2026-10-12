@@ -12,7 +12,7 @@ First release.
 
 ### Server
 
-- `createSpeedTransportServer` serves raw TCP, WebSocket, and HTTP on one port, each with and without TLS, by reading the first bytes of every connection. `listen` binds a port; `handle` serves sockets accepted elsewhere.
+- `createSpeedTransportServer` serves raw TCP, WebSocket, secure WebSocket, and HTTP(S) on one port by reading the first bytes of every connection. `listen` binds a port; `handle` serves sockets accepted elsewhere.
 - Raw TCP transport: the client sends `STCP/1\n`, the server echoes it, then both exchange RFC 6455 frames without masking.
 - WebSocket per RFC 6455 without extensions or subprotocols. Passes the Autobahn conformance suite (301 cases).
 - Messages above `maxBufferedMessageBytes` are counted from their headers without being copied, unmasked, or validated (`bulk` event).

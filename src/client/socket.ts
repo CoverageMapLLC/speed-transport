@@ -1,5 +1,4 @@
 import net from 'node:net';
-import tls from 'node:tls';
 import { TCP_PREAMBLE } from '../detect.js';
 import {
   CloseCode,
@@ -11,15 +10,6 @@ import {
 } from '../frame.js';
 
 export interface SpeedTransportSocketOptions {
-  /**
-   * Verify the server certificate for `tcps://`. Defaults to Node's default, which is true
-   * unless `NODE_TLS_REJECT_UNAUTHORIZED=0`, the same as Node's built-in WebSocket.
-   */
-  rejectUnauthorized?: boolean;
-  /** Extra certificate authorities for `tcps://`. */
-  ca?: string | Buffer | Array<string | Buffer>;
-  /** TLS server name. Defaults to the URL host unless it is an IP address. */
-  servername?: string;
   /** Fail if the server has not answered the preamble within this time. Default 10 s. */
   connectTimeoutMs?: number;
   /** Largest message accepted. Default 64 MiB. */
@@ -59,31 +49,23 @@ const DEFAULT_MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_BULK_THRESHOLD = 64 * 1024;
 const CLOSE_TIMEOUT_MS = 1_000;
 
-/**
- * `tls.connect` spreads its options over its defaults, so an explicit `undefined` would turn
- * verification off. Leave the key out unless it was set.
- */
-function verifyOption(rejectUnauthorized: boolean | undefined): { rejectUnauthorized?: boolean } {
-  return rejectUnauthorized === undefined ? {} : { rejectUnauthorized };
-}
-
-/** Parses `tcp://host:port` and `tcps://host:port`. */
-export function parseTransportUrl(url: string): { secure: boolean; host: string; port: number } {
+/** Parses `tcp://host:port`. */
+export function parseTransportUrl(url: string): { host: string; port: number } {
   const parsed = new URL(url);
-  if (parsed.protocol !== 'tcp:' && parsed.protocol !== 'tcps:') {
-    throw new SyntaxError(`Unsupported URL scheme ${parsed.protocol} (expected tcp: or tcps:)`);
+  if (parsed.protocol !== 'tcp:') {
+    throw new SyntaxError(`Unsupported URL scheme ${parsed.protocol} (expected tcp:)`);
   }
   const port = Number(parsed.port);
   if (!Number.isInteger(port) || port <= 0) {
-    throw new SyntaxError('A tcp:// or tcps:// URL needs an explicit port');
+    throw new SyntaxError('A tcp:// URL needs an explicit port');
   }
   const host = parsed.hostname.replace(/^\[(.*)\]$/, '$1');
-  return { secure: parsed.protocol === 'tcps:', host, port };
+  return { host, port };
 }
 
 /**
  * Raw TCP transport client with the browser WebSocket API, so code written for
- * `WebSocket` works unchanged with `tcp://` and `tcps://` URLs. Frames are never masked,
+ * `WebSocket` works unchanged with `tcp://` URLs. Frames are never masked,
  * which removes the per-byte work a WebSocket client does on every send.
  */
 export class SpeedTransportSocket extends EventTarget {
@@ -123,7 +105,7 @@ export class SpeedTransportSocket extends EventTarget {
   constructor(url: string, options: SpeedTransportSocketOptions = {}) {
     super();
     this.url = url;
-    const { secure, host, port } = parseTransportUrl(url);
+    const { host, port } = parseTransportUrl(url);
     this.discard = options.binaryPayloads === 'discard';
     const maxMessageBytes = options.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES;
 
@@ -149,22 +131,10 @@ export class SpeedTransportSocket extends EventTarget {
       }
     );
 
-    const onConnect = () => {
+    this.socket = net.connect({ host, port }, () => {
       this.socket.setNoDelay(true);
       this.socket.write(TCP_PREAMBLE);
-    };
-    this.socket = secure
-      ? tls.connect(
-          {
-            host,
-            port,
-            servername: options.servername ?? (net.isIP(host) ? undefined : host),
-            ...verifyOption(options.rejectUnauthorized),
-            ca: options.ca,
-          },
-          onConnect
-        )
-      : net.connect({ host, port }, onConnect);
+    });
 
     this.connectTimer = setTimeout(
       () => this.abort('Connection timed out'),
@@ -335,11 +305,8 @@ export class SpeedTransportSocket extends EventTarget {
 }
 
 export interface ProbeOptions {
-  /** Use TLS (`tcps://`). Default false. */
-  secure?: boolean;
+  /** Resolve false if the server has not answered within this time. Default 3 s. */
   timeoutMs?: number;
-  rejectUnauthorized?: boolean;
-  servername?: string;
 }
 
 /**
@@ -357,18 +324,7 @@ export function probeTcpTransport(host: string, port: number, options: ProbeOpti
       socket.destroy();
       resolve(result);
     };
-    const onConnect = () => socket.write(TCP_PREAMBLE);
-    const socket = options.secure
-      ? tls.connect(
-          {
-            host,
-            port,
-            servername: options.servername ?? (net.isIP(host) ? undefined : host),
-            ...verifyOption(options.rejectUnauthorized),
-          },
-          onConnect
-        )
-      : net.connect({ host, port }, onConnect);
+    const socket = net.connect({ host, port }, () => socket.write(TCP_PREAMBLE));
     const timer = setTimeout(() => finish(false), options.timeoutMs ?? 3000);
     socket.on('data', (chunk: Buffer) => {
       received = Buffer.concat([received, chunk]);

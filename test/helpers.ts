@@ -58,8 +58,8 @@ export async function startServer(options: Partial<SpeedTransportServerOptions> 
   return listen(createSpeedTransportServer({ tls: cert, ...options }));
 }
 
-export type TransportName = 'ws' | 'wss' | 'tcp' | 'tcps';
-export const TRANSPORTS: TransportName[] = ['ws', 'wss', 'tcp', 'tcps'];
+export type TransportName = 'ws' | 'wss' | 'tcp';
+export const TRANSPORTS: TransportName[] = ['ws', 'wss', 'tcp'];
 
 /** A received message: text or the byte length of a binary message. */
 export type Received = { text: string } | { binary: number; bytes?: Buffer };
@@ -167,11 +167,8 @@ export function connectClient(
   port: number,
   options: { path?: string; tcp?: SpeedTransportSocketOptions } = {}
 ): Promise<TestClient> {
-  if (transport === 'tcp' || transport === 'tcps') {
-    const socket = new SpeedTransportSocket(`${transport}://127.0.0.1:${port}`, {
-      rejectUnauthorized: false,
-      ...options.tcp,
-    });
+  if (transport === 'tcp') {
+    const socket = new SpeedTransportSocket(`tcp://127.0.0.1:${port}`, options.tcp);
     const open = new Promise<void>((resolve, reject) => {
       socket.addEventListener('open', () => resolve());
       socket.addEventListener('close', () => reject(new Error('closed before open')));

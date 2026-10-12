@@ -24,22 +24,24 @@ The server reads from each new connection until the first bytes identify it:
 
 | First bytes | Meaning | Then |
 |---|---|---|
-| `0x16` | TLS handshake record | The TLS layer completes the handshake, and detection runs again on the decrypted stream |
+| `0x16` | TLS handshake record | The TLS layer completes the handshake, and detection runs again on the decrypted stream, which must be HTTP |
 | `STCP/1\n` (7 bytes) | Raw TCP | A raw TCP session (see below) |
 | `A` to `Z` | HTTP request | Node's HTTP parser: routes go to `requestListener`, `Upgrade: websocket` requests become WebSocket sessions |
 | anything else | Unknown | The connection is destroyed |
 
-Detection waits for more bytes while they are still a prefix of the preamble, so a preamble split across packets works. A connection that has not identified itself within `detectTimeoutMs` (10 s) is destroyed. TLS inside TLS is refused.
+Detection waits for more bytes while they are still a prefix of the preamble, so a preamble split across packets works. A connection that has not identified itself within `detectTimeoutMs` (10 s) is destroyed. Inside TLS only HTTP is accepted: TLS inside TLS and the raw TCP preamble are refused.
 
-That gives six endpoints on one port:
+That gives five endpoints on one port:
 
 | Transport | Without TLS | With TLS |
 |---|---|---|
-| Raw TCP | `tcp://host:port` | `tcps://host:port` |
+| Raw TCP | `tcp://host:port` | none |
 | WebSocket | `ws://host:port/path` | `wss://host:port/path` |
 | HTTP | `http://host:port/...` | `https://host:port/...` |
 
-`plaintext: false` refuses everything without TLS (HTTP gets `400 TLS required`). `tcp: false` refuses raw TCP. `websocket: false` refuses upgrades, and `websocket: { path }` limits them to one path (others get `404`).
+Raw TCP is plaintext only. Speed test traffic carries no private data, so TLS is used only where browsers need it: secure WebSocket from HTTPS pages.
+
+`plaintext: false` refuses everything without TLS (HTTP gets `400 TLS required`), which leaves secure WebSocket and HTTPS. `tcp: false` refuses raw TCP. `websocket: false` refuses upgrades, and `websocket: { path }` limits them to one path (others get `404`).
 
 When the server is given `onTlsClientHello`, it sees the parsed SNI and ALPN of every ClientHello before the handshake and may take the socket over, which is how the CoverageMap server answers ACME TLS-ALPN-01 challenges on its public port.
 
@@ -47,14 +49,14 @@ When the server is given `onTlsClientHello`, it sees the parsed SNI and ALPN of 
 
 ```
 client                                server
-  | ---- TCP (+ TLS) handshake ------> |
+  | ---- TCP handshake --------------> |
   | ---- "STCP/1\n" -----------------> |
   |                                    |  authorize, limiter
   | <--- "STCP/1\n" ------------------ |
   | <=== frames, both directions ====> |
 ```
 
-1. The client connects (and completes TLS for `tcps://`) and sends the 7 ASCII bytes `STCP/1\n` (`53 54 43 50 2F 31 0A`). It may send frames right behind the preamble.
+1. The client connects and sends the 7 ASCII bytes `STCP/1\n` (`53 54 43 50 2F 31 0A`). It may send frames right behind the preamble.
 2. The server admits the session (see [admission](#admission-authorize-and-limits)) and echoes the same 7 bytes. A refused session is closed without the echo.
 3. From then on both sides send [frames](#frames). Neither side masks.
 
@@ -121,7 +123,7 @@ The reset matters for speed tests: a graceful close lets the kernel deliver ever
 
 Every session, on every transport, passes the same checks after its handshake or preamble and before it opens:
 
-1. `authorize(context)`, if given. `context` has `kind` (`tcp` or `websocket`), `secure`, `remoteAddress`, and the upgrade `request` (null for raw TCP). `true` admits. `false` or `{ status, reason }` refuses (the status is used for WebSocket). A thrown error refuses with `500`.
+1. `authorize(context)`, if given. `context` has `kind` (`tcp` or `websocket`), `secure` (true for secure WebSocket), `remoteAddress`, and the upgrade `request` (null for raw TCP). `true` admits. `false` or `{ status, reason }` refuses (the status is used for WebSocket). A thrown error refuses with `500`.
 2. The `limiter`, if given, under the key from `clientKey(context)` (the remote address by default). A refused acquire answers `429`; a limiter that throws answers `503`. The slot is released when the session closes.
 
 Raw TCP sessions that are refused are closed without the preamble echo.
@@ -147,7 +149,7 @@ Raw TCP sessions that are refused are closed without the preamble echo.
 | Client | Use |
 |---|---|
 | Browser | `wss://` (or `ws://` on pages served over HTTP) |
-| Node.js | `tcps://` when the server is known to offer it (for CoverageMap servers, `TCPSv1` in `protocols`; otherwise `probeTcpTransport(host, port, { secure: true })`), else `wss://`. Fall back to `wss://` if the first raw TCP connection fails |
+| Node.js | `tcp://` when the server is known to offer it (for CoverageMap servers, `TCPv1` in `protocols`; otherwise `probeTcpTransport(host, port)`), else `wss://`. Fall back to `wss://` if the first raw TCP connection fails |
 | Behind a corporate proxy or a CDN | `wss://`; proxies and CDNs only forward HTTP |
 
 The raw TCP client, `SpeedTransportSocket`, has the WebSocket API, so the same code can drive either. With `binaryPayloads: 'discard'` it does not copy large binary messages: they arrive as a shared zero-filled `ArrayBuffer` of the right length, which is all a throughput test needs.

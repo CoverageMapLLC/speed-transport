@@ -110,18 +110,19 @@ describe('fuzzing every entry point', () => {
 });
 
 describe('abrupt disconnects', () => {
-  const stages: Array<[string, Buffer[]]> = [
-    ['mid preamble', [TCP_PREAMBLE.subarray(0, 3)]],
-    ['mid frame header', [TCP_PREAMBLE, Buffer.from([0x82, 0x7f, 0x00])]],
-    ['mid payload', [TCP_PREAMBLE, Buffer.concat([Buffer.from([0x82, 0x7e, 0x10, 0x00]), Buffer.alloc(1000)])]],
-    ['mid HTTP head', [Buffer.from('GET / HTTP/1.1\r\nHost: x\r\n')]],
-    ['during a download', [TCP_PREAMBLE, encodeFrame(Opcode.Text, Buffer.from('START 1024 100'))]],
+  // Raw TCP is plaintext only; HTTP is also tried inside TLS.
+  const stages: Array<[string, Buffer[], boolean]> = [
+    ['mid preamble', [TCP_PREAMBLE.subarray(0, 3)], false],
+    ['mid frame header', [TCP_PREAMBLE, Buffer.from([0x82, 0x7f, 0x00])], false],
+    ['mid payload', [TCP_PREAMBLE, Buffer.concat([Buffer.from([0x82, 0x7e, 0x10, 0x00]), Buffer.alloc(1000)])], false],
+    ['mid HTTP head', [Buffer.from('GET / HTTP/1.1\r\nHost: x\r\n')], true],
+    ['during a download', [TCP_PREAMBLE, encodeFrame(Opcode.Text, Buffer.from('START 1024 100'))], false],
   ];
 
-  it.each(stages)('leaves no session behind when a client vanishes %s', async (_name, chunks) => {
+  it.each(stages)('leaves no session behind when a client vanishes %s', async (_name, chunks, alsoTls) => {
     const counter = new ConnectionCounter(1000);
     running = await startSpeedTestServer({ limiter: counter });
-    for (let i = 0; i < 10; i++) await blast(running.port, chunks, i % 2 === 1, 20);
+    for (let i = 0; i < 10; i++) await blast(running.port, chunks, alsoTls && i % 2 === 1, 20);
     await sleep(200);
     expect(running.server.connectionCount).toBe(0);
     expect(counter.total).toBe(0);
@@ -132,7 +133,7 @@ describe('abrupt disconnects', () => {
     const counter = new ConnectionCounter(10000);
     running = await startSpeedTestServer({ limiter: counter });
     for (let round = 0; round < 5; round++) {
-      const clients = await Promise.all(Array.from({ length: 40 }, (_, i) => connectClient(TRANSPORTS[i % 4], running!.port)));
+      const clients = await Promise.all(Array.from({ length: 40 }, (_, i) => connectClient(TRANSPORTS[i % TRANSPORTS.length], running!.port)));
       for (const client of clients) client.close();
       await Promise.all(clients.map((client) => client.closed()));
     }

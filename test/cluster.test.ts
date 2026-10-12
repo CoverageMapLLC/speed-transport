@@ -149,7 +149,7 @@ describe('cluster with in-process workers', () => {
     const a = await connectClient('ws', port);
     const b = await connectClient('tcp', port);
     expect(workers.map((w) => w.connections)).toEqual([1, 1]);
-    await expect(connectClient('tcps', port)).rejects.toThrow();
+    await expect(connectClient('tcp', port)).rejects.toThrow();
     a.close();
     await a.closed();
     await sleep(50);

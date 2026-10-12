@@ -3,7 +3,7 @@
 Two entry points:
 
 - `@coveragemap/speed-transport`: servers, connections, the speed test protocol, the cluster, and the frame, handshake, and detection helpers.
-- `@coveragemap/speed-transport/client`: the raw TCP client. It only loads `node:net` and `node:tls`, so applications that bundle it pull in no server code.
+- `@coveragemap/speed-transport/client`: the raw TCP client. It only loads `node:net`, so applications that bundle it pull in no server code.
 
 Everything is ESM and typed.
 
@@ -62,8 +62,8 @@ await server.listen(443);
 | Option | Default | Description |
 |---|---|---|
 | `onConnection(connection)` | required | Called for every admitted session. |
-| `tls` | none | Node `TlsOptions`. When set, TLS connections are accepted and their decrypted stream is detected again, which gives `wss://` and `tcps://`. Pass `{}` to enable TLS and supply the certificate later with `setSecureContext`, as cluster workers do. `ALPNProtocols` defaults to `['http/1.1']`. |
-| `plaintext` | `true` | Accept connections without TLS. `false` refuses them; HTTP gets `400 TLS required`. |
+| `tls` | none | Node `TlsOptions`. When set, TLS connections are accepted and their decrypted stream is handed to HTTP, which gives `wss://` and `https://`. Pass `{}` to enable TLS and supply the certificate later with `setSecureContext`, as cluster workers do. `ALPNProtocols` defaults to `['http/1.1']`. |
+| `plaintext` | `true` | Accept connections without TLS. `false` refuses them, raw TCP included since it is plaintext only; HTTP gets `400 TLS required`. |
 | `tcp` | `true` | Accept the raw TCP transport. |
 | `websocket` | `true` | `false` refuses upgrades. `{ path: '/v1/ws' }` or `{ path: (pathname) => boolean }` limits them to some paths; others get `404`. |
 | `requestListener(req, res)` | 404 for everything | Handles HTTP requests on the same port. An Express app works. |
@@ -73,7 +73,7 @@ await server.listen(443);
 | `onTlsClientHello(hello, socket)` | none | Sees `{ servername, alpnProtocols }` of every ClientHello before the handshake. Returning `true` takes the socket over (the bytes read so far were pushed back onto it). |
 | `limits` | see below | Partial [`ServerLimits`](#limits). |
 
-`context` (a `SessionContext`) is `{ kind: 'tcp' | 'websocket', secure, remoteAddress, request }`, where `request` is the upgrade `IncomingMessage` for WebSocket and null for raw TCP.
+`context` (a `SessionContext`) is `{ kind: 'tcp' | 'websocket', secure, remoteAddress, request }`, where `secure` is true for secure WebSocket and `request` is the upgrade `IncomingMessage` for WebSocket and null for raw TCP.
 
 ### Limits
 
@@ -91,7 +91,7 @@ await server.listen(443);
 
 ## Connection
 
-One session over raw TCP or WebSocket, plain or TLS. An `EventEmitter`.
+One session over raw TCP, WebSocket, or secure WebSocket. An `EventEmitter`.
 
 | Event | Arguments | When |
 |---|---|---|
@@ -104,7 +104,7 @@ One session over raw TCP or WebSocket, plain or TLS. An `EventEmitter`.
 | Member | Description |
 |---|---|
 | `kind` | `'tcp'` or `'websocket'` |
-| `secure` | Whether the session runs over TLS. |
+| `secure` | Whether the session runs over TLS (secure WebSocket). |
 | `request` | The upgrade request for WebSocket, null for raw TCP. |
 | `remoteAddress` | The socket's remote address. |
 | `socket` | The underlying `net.Socket` or `tls.TLSSocket`. |
@@ -162,13 +162,10 @@ From `@coveragemap/speed-transport/client`. Node.js only.
 new SpeedTransportSocket(url: string, options?: SpeedTransportSocketOptions)
 ```
 
-A raw TCP client with the WebSocket API. `url` is `tcp://host:port` or `tcps://host:port` with an explicit port (IPv6 hosts in brackets).
+A raw TCP client with the WebSocket API. `url` is `tcp://host:port` with an explicit port (IPv6 hosts in brackets). Other schemes throw a `SyntaxError`.
 
 | Option | Default | Description |
 |---|---|---|
-| `rejectUnauthorized` | Node's default | Verify the server certificate. Node's default is true unless `NODE_TLS_REJECT_UNAUTHORIZED=0`, the same as its built-in WebSocket. |
-| `ca` | system | Extra certificate authorities. |
-| `servername` | URL host | TLS server name. Not sent for IP addresses. |
 | `connectTimeoutMs` | 10 000 | Fail if the preamble has not been echoed by then. |
 | `maxMessageBytes` | 64 MiB | Larger messages fail the connection with `1009`. |
 | `binaryPayloads` | `'copy'` | `'discard'` does not copy binary messages above `bulkThresholdBytes`: they arrive as a zero-filled `ArrayBuffer` of the right length that is shared between messages. |
@@ -180,9 +177,9 @@ Differences from WebSocket: there is no HTTP handshake, frames are not masked, a
 
 ### `probeTcpTransport(host, port, options?)`
 
-Resolves true when the server answers the raw TCP preamble, false otherwise (including timeouts, refused connections, and TLS errors). Options: `secure` (use TLS, default false), `timeoutMs` (3000), `rejectUnauthorized`, `servername`. The probe connection is closed before it resolves and does not hold a connection slot.
+Resolves true when the server answers the raw TCP preamble, false otherwise (including timeouts and refused connections). Options: `timeoutMs` (3000). The probe connection is closed before it resolves and does not hold a connection slot.
 
-`parseTransportUrl(url)` returns `{ secure, host, port }`. `TCP_PREAMBLE` is also exported from the client.
+`parseTransportUrl(url)` returns `{ host, port }`. `TCP_PREAMBLE` is also exported from the client.
 
 ## Low level helpers
 
