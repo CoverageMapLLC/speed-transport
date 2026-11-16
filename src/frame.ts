@@ -125,6 +125,14 @@ export interface FrameParserHandler {
   onClose(code: number | null, reason: string): void;
   /** The input violated the protocol; the parser stops. */
   onError(code: number, reason: string): void;
+  /**
+   * Optional. Payload bytes of data messages (text and binary, buffered and bulk) as they
+   * arrive, so a reader can count a large message before it is complete. Called at most once
+   * per `push`, and always before the message's `onMessage` or `onBulkMessage`, so the calls
+   * for one message add up to its length and the message never has to be counted again.
+   * Control frames are not reported.
+   */
+  onPayloadProgress?(bytes: number, binary: boolean): void;
 }
 
 const enum State {
@@ -159,11 +167,16 @@ export class FrameParser {
   private inMessage = false;
   private buffering = false;
   private chunks: Buffer[] = [];
+  /** Data payload bytes read and not yet passed to `onPayloadProgress`. */
+  private unreported = 0;
+  private readonly reportsProgress: boolean;
 
   constructor(
     private readonly options: FrameParserOptions,
     private readonly handler: FrameParserHandler
-  ) {}
+  ) {
+    this.reportsProgress = typeof handler.onPayloadProgress === 'function';
+  }
 
   /** True once a protocol error was reported; further input is ignored. */
   get failed(): boolean {
@@ -177,6 +190,7 @@ export class FrameParser {
       if (this.state === State.Payload) {
         const take = Math.min(this.remaining, length - offset);
         if (this.control || this.buffering) this.copyPayload(chunk, offset, take);
+        if (this.reportsProgress && !this.control) this.unreported += take;
         offset += take;
         this.remaining -= take;
         this.frameOffset += take;
@@ -208,12 +222,20 @@ export class FrameParser {
         this.headerNeeded = 2;
       }
     }
+    if (this.unreported > 0 && this.state !== State.Failed) this.reportProgress();
+  }
+
+  private reportProgress(): void {
+    const bytes = this.unreported;
+    this.unreported = 0;
+    this.handler.onPayloadProgress!(bytes, this.messageOpcode === Opcode.Binary);
   }
 
   private fail(code: number, reason: string): void {
     if (this.state === State.Failed) return;
     this.state = State.Failed;
     this.chunks = [];
+    this.unreported = 0;
     this.handler.onError(code, reason);
   }
 
@@ -361,6 +383,7 @@ export class FrameParser {
     }
 
     if (!this.fin) return;
+    if (this.unreported > 0) this.reportProgress();
     const binary = this.messageOpcode === Opcode.Binary;
     const messageLength = this.messageLength;
     this.inMessage = false;
