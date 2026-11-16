@@ -413,3 +413,91 @@ describe('FrameParser fuzzing', () => {
     }
   });
 });
+
+describe('onPayloadProgress', () => {
+  type Seen = { type: 'progress'; bytes: number; binary: boolean } | { type: 'message' | 'bulk'; length: number } | { type: 'push' };
+
+  /** Feeds `chunks` one push at a time and records progress, messages, and push boundaries. */
+  function track(chunks: Buffer[], options: Partial<FrameParserOptions> = {}): Seen[] {
+    const seen: Seen[] = [];
+    const parser = new FrameParser(
+      { requireMask: false, maxMessageBytes: 1 << 24, maxBufferedMessageBytes: 1024, ...options },
+      {
+        onMessage: (data) => seen.push({ type: 'message', length: data.length }),
+        onBulkMessage: (length) => seen.push({ type: 'bulk', length }),
+        onPing: () => {},
+        onPong: () => {},
+        onClose: () => {},
+        onError: () => {},
+        onPayloadProgress: (bytes, isBinary) => seen.push({ type: 'progress', bytes, binary: isBinary }),
+      }
+    );
+    for (const chunk of chunks) {
+      parser.push(chunk);
+      seen.push({ type: 'push' });
+    }
+    return seen;
+  }
+
+  /** Splits `data` into pieces of `size` bytes. */
+  const pieces = (data: Buffer, size: number) =>
+    Array.from({ length: Math.ceil(data.length / size) }, (_, i) => data.subarray(i * size, (i + 1) * size));
+
+  it('reports a bulk message as it arrives, at most once per push, before the message', () => {
+    const frame = binary(Buffer.alloc(100_000));
+    const seen = track(pieces(frame, 16_384));
+    const bulkAt = seen.findIndex((event) => event.type === 'bulk');
+    const progress = seen.filter((event) => event.type === 'progress');
+    // Every push before the last delivered bytes of the message in progress.
+    expect(progress.length).toBeGreaterThan(5);
+    expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(100_000);
+    expect(progress.every((event) => event.binary)).toBe(true);
+    expect(seen.slice(bulkAt + 1).some((event) => event.type === 'progress')).toBe(false);
+    // No push reports twice.
+    let sincePush = 0;
+    for (const event of seen) {
+      if (event.type === 'push') sincePush = 0;
+      if (event.type === 'progress') expect(++sincePush).toBe(1);
+    }
+  });
+
+  it('reports buffered text messages with binary false', () => {
+    const seen = track([text('PONG')]);
+    expect(seen).toEqual([{ type: 'progress', bytes: 4, binary: false }, { type: 'message', length: 4 }, { type: 'push' }]);
+  });
+
+  it('reports each message of one push before that message is delivered', () => {
+    const seen = track([Buffer.concat([binary(Buffer.alloc(2000)), binary(Buffer.alloc(3000)), binary(Buffer.alloc(500).subarray(0, 0))])]);
+    expect(seen).toEqual([
+      { type: 'progress', bytes: 2000, binary: true },
+      { type: 'bulk', length: 2000 },
+      { type: 'progress', bytes: 3000, binary: true },
+      { type: 'bulk', length: 3000 },
+      { type: 'message', length: 0 },
+      { type: 'push' },
+    ]);
+  });
+
+  it('counts a fragmented message across its frames and leaves out control frames', () => {
+    const stream = Buffer.concat([
+      binary(Buffer.alloc(1500), false),
+      encodeFrame(Opcode.Ping, Buffer.from('ping')),
+      continuation(Buffer.alloc(700)),
+    ]);
+    const seen = track(pieces(stream, 300));
+    const progress = seen.filter((event) => event.type === 'progress');
+    expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(2200);
+    expect(seen.filter((event) => event.type === 'bulk')).toEqual([{ type: 'bulk', length: 2200 }]);
+  });
+
+  it('reports nothing after a protocol error', () => {
+    // A complete first fragment, then a new text message before the binary one finished.
+    const seen = track([binary(Buffer.alloc(996), false), text('A')]);
+    expect(seen).toEqual([{ type: 'progress', bytes: 996, binary: true }, { type: 'push' }, { type: 'push' }]);
+  });
+
+  it('is optional: a handler without it parses the same', () => {
+    const frame = binary(Buffer.alloc(5000));
+    expect(parse(pieces(frame, 777))).toEqual([{ type: 'bulk', length: 5000, binary: true }]);
+  });
+});

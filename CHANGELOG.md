@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+### New Features
+
+- **Payload progress**: `FrameParserHandler` has an optional `onPayloadProgress(bytes, binary)`, and `SpeedTransportSocket` an `onpayloadprogress(bytes)` property for binary messages. Both report a data message's payload bytes as they arrive, at most once per `push` (per read on the socket), and always before the message itself is delivered, so the reports for one message add up to its length. A throughput client can count a large message while it is still arriving instead of only once it is complete, without reaching into the parser's internals. The cost is one addition per chunk and one call per read, and parsers whose handler has no `onPayloadProgress` (the server's) do neither.
+
 ## 0.2.0
 
 ### Breaking Changes

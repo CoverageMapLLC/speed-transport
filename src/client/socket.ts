@@ -88,6 +88,13 @@ export class SpeedTransportSocket extends EventTarget {
   onmessage: Handler<MessageEvent> = null;
   onerror: Handler<Event> = null;
   onclose: Handler<SpeedTransportCloseEvent> = null;
+  /**
+   * Not part of the WebSocket API. Called with binary message payload bytes as they arrive,
+   * at most once per read and always before that message's `message` event, so the calls for
+   * one message add up to its `byteLength`. A throughput test can count a large message while
+   * it is still arriving instead of only once it is complete. Never called for text messages.
+   */
+  onpayloadprogress: ((bytes: number) => void) | null = null;
 
   private readonly socket: net.Socket;
   private readonly parser: FrameParser;
@@ -128,6 +135,9 @@ export class SpeedTransportSocket extends EventTarget {
         onPong: () => {},
         onClose: (code, reason) => this.onPeerClose(code, reason),
         onError: (code, reason) => this.failConnection(code, reason),
+        onPayloadProgress: (bytes, binary) => {
+          if (binary && this.readyState === SpeedTransportSocket.OPEN) this.onpayloadprogress?.(bytes);
+        },
       }
     );
 

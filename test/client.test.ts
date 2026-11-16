@@ -168,6 +168,30 @@ describe('SpeedTransportSocket', () => {
     socket.close();
   });
 
+  it('reports binary payload bytes as they arrive, before each message event', async () => {
+    running = await startSpeedTestServer();
+    const socket = new SpeedTransportSocket(`tcp://127.0.0.1:${running.port}`, { binaryPayloads: 'discard' });
+    await opened(socket);
+    let reported = 0;
+    let reports = 0;
+    const atMessage: Array<[number, number]> = [];
+    socket.onpayloadprogress = (bytes) => {
+      reported += bytes;
+      reports++;
+    };
+    socket.onmessage = (event) => {
+      if (typeof event.data !== 'string') atMessage.push([reported, (event.data as ArrayBuffer).byteLength]);
+    };
+    socket.send('PING');
+    socket.send('START 4096 3');
+    while (atMessage.length < 3) await sleep(10);
+    // Each message is fully reported before its event, and nothing else is: not the PONG.
+    expect(atMessage.map(([total]) => total)).toEqual([4, 8, 12].map((mib) => mib * 1024 * 1024));
+    // A 4 MiB message arrives over many reads, so it was reported in parts before it completed.
+    expect(reports).toBeGreaterThan(3);
+    socket.close();
+  });
+
   it('reports bufferedAmount while data is queued', async () => {
     running = await startServer({ onConnection: () => {} });
     const socket = new SpeedTransportSocket(`tcp://127.0.0.1:${running.port}`);
