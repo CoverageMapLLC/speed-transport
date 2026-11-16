@@ -127,10 +127,12 @@ export interface FrameParserHandler {
   onError(code: number, reason: string): void;
   /**
    * Optional. Payload bytes of data messages (text and binary, buffered and bulk) as they
-   * arrive, so a reader can count a large message before it is complete. Called at most once
-   * per `push`, and always before the message's `onMessage` or `onBulkMessage`, so the calls
-   * for one message add up to its length and the message never has to be counted again.
-   * Control frames are not reported.
+   * arrive, so a reader can count a large message before it is complete. Within one `push`
+   * the bytes are coalesced, except that they are reported before each message that the chunk
+   * completes, so one `push` that carries several messages calls this once per message. Always
+   * called before the message's `onMessage` or `onBulkMessage`, so the calls for one message
+   * add up to its length and the message never has to be counted again. Sum the calls: the
+   * last one of a `push` is not the whole chunk. Control frames are not reported.
    */
   onPayloadProgress?(bytes: number, binary: boolean): void;
 }

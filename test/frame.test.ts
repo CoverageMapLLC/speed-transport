@@ -443,7 +443,7 @@ describe('onPayloadProgress', () => {
   const pieces = (data: Buffer, size: number) =>
     Array.from({ length: Math.ceil(data.length / size) }, (_, i) => data.subarray(i * size, (i + 1) * size));
 
-  it('reports a bulk message as it arrives, at most once per push, before the message', () => {
+  it('reports a bulk message as it arrives, once per push while it is the only message, before the message', () => {
     const frame = binary(Buffer.alloc(100_000));
     const seen = track(pieces(frame, 16_384));
     const bulkAt = seen.findIndex((event) => event.type === 'bulk');
