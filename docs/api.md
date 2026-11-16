@@ -171,6 +171,8 @@ A raw TCP client with the WebSocket API. `url` is `tcp://host:port` with an expl
 | `binaryPayloads` | `'copy'` | `'discard'` does not copy binary messages above `bulkThresholdBytes`: they arrive as a zero-filled `ArrayBuffer` of the right length that is shared between messages. |
 | `bulkThresholdBytes` | 64 KiB | Threshold for `'discard'`. |
 
+Not in the WebSocket API: `onpayloadprogress`, if set, is called with binary message payload bytes as they arrive, at most once per read and always before that message's `message` event, so the calls for one message add up to its `byteLength`. A throughput test can count a large message while it is still arriving. It is never called for text messages.
+
 It has `readyState` with the `CONNECTING`, `OPEN`, `CLOSING`, and `CLOSED` constants, `url`, `protocol` (`''`), `extensions` (`''`), `binaryType` (`'arraybuffer'` or `'nodebuffer'`), `bufferedAmount`, `send(string | ArrayBuffer | ArrayBufferView)`, `close(code?, reason?)`, and the `open`, `message`, `error`, and `close` events through both `addEventListener` and `on*` properties. `close` events are `SpeedTransportCloseEvent`s with `code`, `reason`, and `wasClean`.
 
 Differences from WebSocket: there is no HTTP handshake, frames are not masked, and `send` before `open` throws like WebSocket does.
@@ -187,7 +189,7 @@ For tests, tools, and custom transports.
 
 | Export | Description |
 |---|---|
-| `FrameParser` | Incremental RFC 6455 frame parser with the bulk message fast path. `new FrameParser({ requireMask, maxMessageBytes, maxBufferedMessageBytes }, handler)`, then `push(chunk)`. The handler has `onMessage`, `onBulkMessage`, `onPing`, `onPong`, `onClose`, and `onError`. |
+| `FrameParser` | Incremental RFC 6455 frame parser with the bulk message fast path. `new FrameParser({ requireMask, maxMessageBytes, maxBufferedMessageBytes }, handler)`, then `push(chunk)`. The handler has `onMessage`, `onBulkMessage`, `onPing`, `onPong`, `onClose`, `onError`, and optionally `onPayloadProgress(bytes, binary)`: data message payload bytes as they arrive, at most once per `push` and always before the message is delivered. |
 | `encodeFrame(opcode, payload?, fin?)` | A complete unmasked frame. |
 | `encodeFrameHeader(opcode, length, fin?)` | Just the header. |
 | `encodeMaskedFrame(opcode, payload, mask?)` | A masked frame, as WebSocket clients send. |
