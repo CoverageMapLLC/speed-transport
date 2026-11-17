@@ -11,7 +11,7 @@ import {
 } from '../src/handshake.js';
 import { ConnectionCounter } from '../src/limiter.js';
 import { resolveWorkerCount } from '../src/cluster.js';
-import { ZeroBufferPool, createSpeedTestServer, parseStartCommand } from '../src/speedtest.js';
+import { MAX_POOLED_BYTES, ZeroBufferPool, createSpeedTestServer, parseStartCommand } from '../src/speedtest.js';
 import { withDefaults } from '../src/defaults.js';
 import { DEFAULT_SERVER_LIMITS, createSpeedTransportServer } from '../src/server.js';
 
@@ -219,6 +219,53 @@ describe('ZeroBufferPool', () => {
     expect(a.every((byte) => byte === 0)).toBe(true);
     expect(pool.get(8)).not.toBe(a);
     expect(pool.size).toBe(2);
+    expect(pool.bytes).toBe(12 * 1024);
+  });
+
+  it('pools every size clients request', () => {
+    const pool = new ZeroBufferPool();
+    const sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 5120, 10, 30, 90, 270, 810, 2430, 5, 15, 45, 135, 405, 1215, 3645];
+    const buffers = sizes.map((sizeKb) => pool.get(sizeKb));
+    expect(pool.size).toBe(sizes.length);
+    sizes.forEach((sizeKb, i) => expect(pool.get(sizeKb)).toBe(buffers[i]));
+  });
+
+  it('keeps at most MAX_POOLED_BYTES however many sizes are requested', () => {
+    const pool = new ZeroBufferPool();
+    for (let sizeKb = 1; sizeKb <= 512; sizeKb++) {
+      expect(pool.get(sizeKb).length).toBe(sizeKb * 1024);
+      expect(pool.bytes).toBeLessThanOrEqual(MAX_POOLED_BYTES);
+    }
+    expect(pool.size).toBeLessThan(512);
+  });
+
+  it('allocates sizes over the remaining budget per request without keeping them', () => {
+    const pool = new ZeroBufferPool();
+    pool.get(10240);
+    pool.get(10241);
+    pool.get(10242);
+    const pooled = pool.bytes;
+    const remainingKb = (MAX_POOLED_BYTES - pooled) / 1024;
+    const a = pool.get(remainingKb + 1);
+    expect(a.length).toBe((remainingKb + 1) * 1024);
+    expect(a.equals(Buffer.alloc(a.length))).toBe(true);
+    expect(pool.get(remainingKb + 1) === a).toBe(false); // not.toBe deep-compares the buffers when it passes
+    expect(pool.size).toBe(3);
+    expect(pool.bytes).toBe(pooled);
+    const b = pool.get(remainingKb);
+    expect(pool.get(remainingKb)).toBe(b);
+    expect(pool.bytes).toBe(MAX_POOLED_BYTES);
+  });
+
+  it('only ever returns zero-filled buffers', () => {
+    const pool = new ZeroBufferPool();
+    const sizes = [1, 1024, 10240, 10240, 10239, 10238, 4096, 1];
+    for (const sizeKb of sizes) {
+      Buffer.allocUnsafe(sizeKb * 1024).fill(0xff);
+      const buffer = pool.get(sizeKb);
+      expect(buffer.length).toBe(sizeKb * 1024);
+      expect(buffer.equals(Buffer.alloc(buffer.length))).toBe(true);
+    }
   });
 });
 
