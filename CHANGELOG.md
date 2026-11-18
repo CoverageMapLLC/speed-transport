@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
+
+### Bug Fixes
+
+- **`ZeroBufferPool` memory is bounded.** The pool kept one zero buffer for every size a `START` asked for and never freed any, so a client sending `START 1 1`, `START 2 1`, … `START 10240 1` could make each server process hold about 50 GiB. The pool now keeps at most `MAX_POOLED_BYTES` (32 MiB, newly exported), as the Cloudflare Worker server already does. A size already pooled is reused as before; a new size is pooled only if it fits, otherwise that `START` gets its own zero buffer, still sent without copying, which is freed when it ends. The sizes clients request (powers of two from 1 KiB to 4 MiB, 5 MiB, and the estimation sizes) fit well under the cap. `ZeroBufferPool` also has a `bytes` getter for the bytes it keeps.
 
 ### Documentation
 

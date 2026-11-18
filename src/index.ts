@@ -19,6 +19,7 @@ export {
 export {
   COMMAND_MAX_BYTES,
   DEFAULT_SPEED_TEST_LIMITS,
+  MAX_POOLED_BYTES,
   ZeroBufferPool,
   createSpeedTestProtocol,
   createSpeedTestServer,

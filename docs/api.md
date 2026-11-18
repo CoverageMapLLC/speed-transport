@@ -128,7 +128,8 @@ The CoverageMap speed test protocol, described in [protocol](./protocol.md#speed
 | `createSpeedTestProtocol({ limits?, pool?, onEvent? })` | The `onConnection` handler on its own. |
 | `DEFAULT_SPEED_TEST_LIMITS` | `{ maxFrameSizeKb: 10240, maxFrameCount: 1000 }` |
 | `parseStartCommand(text)` | `{ sizeKb, count }` for a well formed `START <kb> <count>`, else null. |
-| `ZeroBufferPool` | Zero buffers per size in KiB, shared by every connection that uses the pool. `get(sizeKb)`, `size`. |
+| `ZeroBufferPool` | Zero buffers per size in KiB, shared by every connection that uses the pool. Keeps at most `MAX_POOLED_BYTES` (32 MiB); a size that does not fit gets a fresh buffer per request that is not kept. `get(sizeKb)`, `size` (sizes kept), `bytes` (bytes kept). |
+| `MAX_POOLED_BYTES` | 32 MiB, the most a `ZeroBufferPool` keeps alive. |
 | `COMMAND_MAX_BYTES` | 128. Messages above it are upload data. |
 
 `onEvent` receives `{ type: 'start', connection, command }`, `{ type: 'upload', connection, bytes }`, and `{ type: 'rejected', connection, reason }`, for metrics.
