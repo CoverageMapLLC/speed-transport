@@ -128,7 +128,8 @@ The CoverageMap speed test protocol, described in [protocol](./protocol.md#speed
 | `createSpeedTestProtocol({ limits?, pool?, onEvent? })` | The `onConnection` handler on its own. |
 | `DEFAULT_SPEED_TEST_LIMITS` | `{ maxFrameSizeKb: 10240, maxFrameCount: 1000 }` |
 | `parseStartCommand(text)` | `{ sizeKb, count }` for a well formed `START <kb> <count>`, else null. |
-| `ZeroBufferPool` | Zero buffers per size in KiB, shared by every connection that uses the pool. `get(sizeKb)`, `size`. |
+| `ZeroBufferPool` | Zero buffers per size in KiB, shared by every connection that uses the pool. Keeps at most `MAX_POOLED_BYTES` (32 MiB); a size that does not fit gets a fresh buffer per request that is not kept. `get(sizeKb)`, `size` (sizes kept), `bytes` (bytes kept). |
+| `MAX_POOLED_BYTES` | 32 MiB, the most a `ZeroBufferPool` keeps alive. |
 | `COMMAND_MAX_BYTES` | 128. Messages above it are upload data. |
 
 `onEvent` receives `{ type: 'start', connection, command }`, `{ type: 'upload', connection, bytes }`, and `{ type: 'rejected', connection, reason }`, for metrics.
@@ -171,7 +172,7 @@ A raw TCP client with the WebSocket API. `url` is `tcp://host:port` with an expl
 | `binaryPayloads` | `'copy'` | `'discard'` does not copy binary messages above `bulkThresholdBytes`: they arrive as a zero-filled `ArrayBuffer` of the right length that is shared between messages. |
 | `bulkThresholdBytes` | 64 KiB | Threshold for `'discard'`. |
 
-Not in the WebSocket API: `onpayloadprogress`, if set, is called with binary message payload bytes as they arrive, at most once per read and always before that message's `message` event, so the calls for one message add up to its `byteLength`. A throughput test can count a large message while it is still arriving. It is never called for text messages.
+Not in the WebSocket API: `onpayloadprogress`, if set, is called with binary message payload bytes as they arrive: once per read for the message in progress, plus once before each message the read completes, always before that message's `message` event, so the calls for one message add up to its `byteLength`. Sum the calls. A throughput test can count a large message while it is still arriving. It is never called for text messages.
 
 It has `readyState` with the `CONNECTING`, `OPEN`, `CLOSING`, and `CLOSED` constants, `url`, `protocol` (`''`), `extensions` (`''`), `binaryType` (`'arraybuffer'` or `'nodebuffer'`), `bufferedAmount`, `send(string | ArrayBuffer | ArrayBufferView)`, `close(code?, reason?)`, and the `open`, `message`, `error`, and `close` events through both `addEventListener` and `on*` properties. `close` events are `SpeedTransportCloseEvent`s with `code`, `reason`, and `wasClean`.
 
@@ -189,7 +190,7 @@ For tests, tools, and custom transports.
 
 | Export | Description |
 |---|---|
-| `FrameParser` | Incremental RFC 6455 frame parser with the bulk message fast path. `new FrameParser({ requireMask, maxMessageBytes, maxBufferedMessageBytes }, handler)`, then `push(chunk)`. The handler has `onMessage`, `onBulkMessage`, `onPing`, `onPong`, `onClose`, `onError`, and optionally `onPayloadProgress(bytes, binary)`: data message payload bytes as they arrive, at most once per `push` and always before the message is delivered. |
+| `FrameParser` | Incremental RFC 6455 frame parser with the bulk message fast path. `new FrameParser({ requireMask, maxMessageBytes, maxBufferedMessageBytes }, handler)`, then `push(chunk)`. The handler has `onMessage`, `onBulkMessage`, `onPing`, `onPong`, `onClose`, `onError`, and optionally `onPayloadProgress(bytes, binary)`: data message payload bytes as they arrive, coalesced within a `push` except that they are reported before each message the chunk completes, and always before the message is delivered. Sum the calls. |
 | `encodeFrame(opcode, payload?, fin?)` | A complete unmasked frame. |
 | `encodeFrameHeader(opcode, length, fin?)` | Just the header. |
 | `encodeMaskedFrame(opcode, payload, mask?)` | A masked frame, as WebSocket clients send. |

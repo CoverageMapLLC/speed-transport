@@ -55,21 +55,41 @@ export function parseStartCommand(message: string): StartCommand | null {
   return { sizeKb, count };
 }
 
-/** Zero-filled payloads, allocated once per size and shared by every connection. */
+/**
+ * Most bytes a `ZeroBufferPool` keeps alive. Clients use a fixed set of sizes (powers of two
+ * up to 4 MiB plus 5 MiB, and a few estimation sizes), well under this together.
+ */
+export const MAX_POOLED_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Zero-filled payloads, allocated once per size and shared by every connection. Pooling
+ * stops once the pool would hold more than `MAX_POOLED_BYTES`, so arbitrary sizes cannot
+ * keep more than that alive; other sizes get a fresh buffer per `START` that is not kept.
+ */
 export class ZeroBufferPool {
   private readonly buffers = new Map<number, Buffer>();
+  private pooledBytes = 0;
 
   get(sizeKb: number): Buffer {
     let buffer = this.buffers.get(sizeKb);
     if (!buffer) {
       buffer = Buffer.alloc(sizeKb * 1024);
-      this.buffers.set(sizeKb, buffer);
+      if (this.pooledBytes + buffer.length <= MAX_POOLED_BYTES) {
+        this.buffers.set(sizeKb, buffer);
+        this.pooledBytes += buffer.length;
+      }
     }
     return buffer;
   }
 
+  /** Number of sizes kept. */
   get size(): number {
     return this.buffers.size;
+  }
+
+  /** Bytes the pool keeps alive, at most `MAX_POOLED_BYTES`. */
+  get bytes(): number {
+    return this.pooledBytes;
   }
 }
 

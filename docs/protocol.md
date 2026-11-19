@@ -143,7 +143,7 @@ Raw TCP sessions that are refused are closed without the preamble echo.
 | Anything else | Ignored |
 
 - `START` arguments must be positive decimal integers within `maxFrameSizeKb` (10240) and `maxFrameCount` (1000), or the connection is closed with `1008`.
-- Download messages reuse one zero buffer per size and a cached frame header. Sending pauses while more than `sendHighWaterBytes` (10 MiB by default) is queued on the socket and resumes on `drain`. Several `START`s on one socket are served at the same time; each frame is written whole, so their frames interleave but never split.
+- Download messages reuse one zero buffer per size and a cached frame header. The buffers kept are capped at 32 MiB per pool (each worker process has its own), so arbitrary sizes cannot exhaust memory; a size that does not fit is allocated once for that `START` and dropped when it ends. Sending pauses while more than `sendHighWaterBytes` (10 MiB by default) is queued on the socket and resumes on `drain`. Several `START`s on one socket are served at the same time; each frame is written whole, so their frames interleave but never split.
 - Upload messages over 128 bytes are bulk messages: counted and acknowledged, never read.
 
 ## Choosing a transport in a client
